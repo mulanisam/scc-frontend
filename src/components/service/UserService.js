@@ -1,7 +1,7 @@
 import axios from "axios";
 
 class UserService{
-    static BASE_URL = "http://localhost:8080"
+    static BASE_URL = "scc-backend-production.up.railway.app:8080"
 
     static async login(username, password){
         try{
