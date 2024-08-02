@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'scc-backend-production.up.railway.app:8080'; // Replace with your actual API URL
+const API_BASE_URL = 'https://scc-backend-production.up.railway.app:8080'; // Replace with your actual API URL
 
 export const getData = (type) => {
     return axios.get(`${API_BASE_URL}/user/${type}`);

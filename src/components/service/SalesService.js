@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'scc-backend-production.up.railway.app:8080'; // Replace with your API base URL
+const API_BASE_URL = 'https://scc-backend-production.up.railway.app:8080'; // Replace with your API base URL
 
 const getRoutes = () => axios.get(`${API_BASE_URL}/user/routes`);
 
