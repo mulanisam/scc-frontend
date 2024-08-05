@@ -1,11 +1,12 @@
 import axios from "axios";
-
+import { API_BASE_URL } from './../common/axiosConfig.js';
+import { jwtDecode } from "jwt-decode"; 
 class UserService{
-    static BASE_URL = "https://scc-backend-production.up.railway.app:8080"
+    
 
     static async login(username, password){
         try{
-            const response = await axios.post(`${UserService.BASE_URL}/auth/login`, {username, password})
+            const response = await axios.post(`${API_BASE_URL}/auth/login`, {username, password})
             return response.data;
 
         }catch(err){
@@ -15,7 +16,7 @@ class UserService{
 
     static async register(userData, token){
         try{
-            const response = await axios.post(`${UserService.BASE_URL}/auth/register`, userData, 
+            const response = await axios.post(`${API_BASE_URL}/auth/register`, userData, 
             {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -27,7 +28,7 @@ class UserService{
 
     static async getAllUsers(token){
         try{
-            const response = await axios.get(`${UserService.BASE_URL}/admin/get-all-users`, 
+            const response = await axios.get(`${API_BASE_URL}/admin/get-all-users`, 
             {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -41,7 +42,7 @@ class UserService{
 
     static async getYourProfile(token){
         try{
-            const response = await axios.get(`${UserService.BASE_URL}/adminuser/get-profile`, 
+            const response = await axios.get(`${API_BASE_URL}/adminuser/get-profile`, 
             {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -53,7 +54,7 @@ class UserService{
 
     static async getUserById(userId, token){
         try{
-            const response = await axios.get(`${UserService.BASE_URL}/admin/get-users/${userId}`, 
+            const response = await axios.get(`${API_BASE_URL}/admin/get-users/${userId}`, 
             {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -65,7 +66,7 @@ class UserService{
 
     static async deleteUser(userId, token){
         try{
-            const response = await axios.delete(`${UserService.BASE_URL}/admin/delete/${userId}`, 
+            const response = await axios.delete(`${API_BASE_URL}/admin/delete/${userId}`, 
             {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -78,7 +79,7 @@ class UserService{
 
     static async updateUser(userId, userData, token){
         try{
-            const response = await axios.put(`${UserService.BASE_URL}/admin/update/${userId}`, userData,
+            const response = await axios.put(`${API_BASE_URL}/admin/update/${userId}`, userData,
             {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -95,8 +96,25 @@ class UserService{
     }
 
     static isAuthenticated(){
-        const token = localStorage.getItem('token')
-        return !!token
+        const token = localStorage.getItem('token');
+        if (!token) return false;
+    
+        try {
+            const decodedToken = jwtDecode(token);
+            const currentTime = Date.now() / 1000; // Current time in seconds
+    
+            // Check if token is expired
+            if (decodedToken.exp < currentTime) {
+                this.logout(); // Optionally log out the user if token is expired
+                return false;
+            }
+    
+            return true;
+        } catch (error) {
+            console.error('Error decoding token:', error);
+            this.logout(); // Optionally log out the user if there is an error
+            return false;
+        }
     }
 
     static isAdmin(){

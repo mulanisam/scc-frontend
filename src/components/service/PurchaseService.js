@@ -1,10 +1,13 @@
 import axios from 'axios';
+import { API_BASE_URL } from './../common/axiosConfig.js'
 
-const API_BASE_URL = 'https://scc-backend-production.up.railway.app:8080';
+const getToken = () => localStorage.getItem('token');
 
 export const fetchSuppliers = async () => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/user/suppliers`);
+    const response = await axios.get(`${API_BASE_URL}/user/suppliers`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
     return response.data;
   } catch (error) {
     console.error('Error fetching suppliers:', error);
@@ -14,7 +17,9 @@ export const fetchSuppliers = async () => {
 
 export const fetchVehicles = async () => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/user/vehicles`);
+    const response = await axios.get(`${API_BASE_URL}/user/vehicles`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
     return response.data;
   } catch (error) {
     console.error('Error fetching vehicles:', error);
@@ -27,6 +32,7 @@ export const submitPurchase = async (formData) => {
     const response = await axios.post(`${API_BASE_URL}/user/purchases`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${getToken()}`
       },
     });
     return response.data;
@@ -37,6 +43,13 @@ export const submitPurchase = async (formData) => {
 };
 
 export const fetchDrivers = async () => {
-    const response = await axios.get(`${API_BASE_URL}/user/drivers`);
+  try {
+    const response = await axios.get(`${API_BASE_URL}/user/drivers`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
     return response.data;
-  };
+  } catch (error) {
+    console.error('Error fetching drivers:', error);
+    throw error;
+  }
+};

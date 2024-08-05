@@ -22,6 +22,8 @@ import {
     Alert,
 } from '@mui/material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles } from '../service/SalesService'; // Ensure this path is correct
+import UserService from '../service/UserService';
+import { Navigate } from 'react-router-dom';
 
 const SalesEntry = () => {
     const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10)); // Auto-select today's date
@@ -38,6 +40,9 @@ const SalesEntry = () => {
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
     useEffect(() => {
+        if(!UserService.isAuthenticated()){
+            window.location.href = '/'; 
+        }
         getRoutes()
             .then(response => setRoutes(response.data))
             .catch(error => console.error('Error fetching routes:', error));
@@ -49,6 +54,8 @@ const SalesEntry = () => {
         getVehicles()
             .then(response => setVehicles(response.data))
             .catch(error => console.error('Error fetching vehicles:', error));
+        
+            
     }, []);
 
     useEffect(() => {

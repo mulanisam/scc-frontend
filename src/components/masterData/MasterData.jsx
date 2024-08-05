@@ -21,10 +21,14 @@ import {
     DialogTitle,
     TextField,
     TableSortLabel,
-    InputAdornment
+    InputAdornment,
+    MenuItem,
+    Select,
+    FormControl,
+    InputLabel
 } from '@mui/material';
 import { Edit, Delete, Search } from '@mui/icons-material';
-import { getData, createData , updateData, deleteData} from '../service/MasterDataService';
+import { getData, createData, updateData, deleteData } from '../service/MasterDataService';
 
 const MasterData = () => {
     const [dataType, setDataType] = useState('');
@@ -37,8 +41,13 @@ const MasterData = () => {
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [cities, setCities] = useState([]);
+    const [routes, setRoutes] = useState([]);
+    const [selectedCity, setSelectedCity] = useState(formData.city || '');
+    const [selectedRoute, setSelectedRoute] = useState(formData.route || '');
+    const [expirationMessage, setExpirationMessage] = useState('');
 
-    const dataTypes = ['customers', 'routes', 'drivers', 'cities', 'vehicles','suppliers'];
+    const dataTypes = ['customers', 'routes', 'drivers', 'cities', 'vehicles', 'suppliers'];
 
     useEffect(() => {
         // Fetch data when dataType changes
@@ -46,6 +55,7 @@ const MasterData = () => {
             fetchData(dataType);
         }
     }, [dataType]);
+
     useEffect(() => {
         if (data.length > 0 && sortConfig.key !== null) {
             const sortedData = [...data].sort((a, b) => {
@@ -61,50 +71,98 @@ const MasterData = () => {
         }
     }, [sortConfig]);
 
+    useEffect(() => {
+        // Fetch cities and routes for dropdowns
+        if (dataType === 'customers' || dataType === 'cities') {
+            getData('cities').then(response => setCities(response.data));
+        }
+        if (dataType === 'customers' || dataType === 'cities' || dataType === 'routes') {
+            getData('routes').then(response => setRoutes(response.data));
+        }
+    }, [dataType]);
+
+    useEffect(() => {
+        // Update expiration message when data changes
+        updateExpirationMessages(data);
+    }, [data]);
+    const updateExpirationMessages = (data) => {
+        if (dataType === 'vehicles') {
+            const currentDate = new Date();
+            const expirationMessages = [];
+    
+            data.forEach((item) => {
+                const vehicleNo = item.vehicleNo; // Assuming vehicleNo is the field name
+                const dateFields = ['passingDate', 'insuranceDate', 'fitnessDate', 'pucdate']; // Adjust based on your date fields
+                const messages = [];
+    
+                dateFields.forEach((field) => {
+                    if (item[field]) {
+                        const date = new Date(item[field]);
+                        const diffDays = Math.floor((date - currentDate) / (1000 * 60 * 60 * 24));
+    
+                        if (diffDays <= 0) {
+                            // Date is already expired
+                            messages.push(`${field} expired`);
+                        } else if (diffDays <= 30 && diffDays > 0) {
+                            // Date is within 30 days
+                            messages.push(`${field} expiring in ${diffDays} days!`);
+                        }
+                    }
+                });
+    
+                if (messages.length > 0) {
+                    expirationMessages.push(`${vehicleNo} ${messages.join(', ')}`);
+                }
+            });
+    
+            setExpirationMessage(expirationMessages.join(' | '));
+        } else {
+            setExpirationMessage('');
+        }
+    };
+    
+    
     const fetchData = (type) => {
         // Fetch data of selected dataType
         getData(type)
             .then(response => {
                 let modifiedData = response.data;
-                if(type==='routes'){
-                modifiedData = modifyRoutes(response.data);
+                if (type === 'routes') {
+                    modifiedData = modifyRoutes(response.data);
                 }
-                if(type==='customers'){
+                if (type === 'customers') {
                     modifiedData = modifyCustomers(response.data);
-                    }
-                    if(type==='cities'){
-                        modifiedData = modifyCities(response.data);
-                        }
+                }
+                if (type === 'cities') {
+                    modifiedData = modifyCities(response.data);
+                }
                 setData(modifiedData);
             })
             .catch(error => {
                 handleSnackbarError(`Error fetching ${type} data`);
             });
     };
+
     const modifyRoutes = (routes) => {
-        return routes.map(route => {
-            return {
-                ...route,
-                cities: route.cities.map(city => city.name).join(', ')
-            };
-        });
+        return routes.map(route => ({
+            ...route,
+            cities: route.cities.map(city => city.name).join(', ')
+        }));
     };
+
     const modifyCustomers = (customers) => {
-        return customers.map(customer => {
-            return {
-                ...customer,
-                city: customer.city.name,
-                route: customer.city.route.name
-            };
-        });
+        return customers.map(customer => ({
+            ...customer,
+            city: customer.city.name,
+            route: customer.city.route.name
+        }));
     };
+
     const modifyCities = (cities) => {
-        return cities.map(({customers, ...city}) => {
-            return {
-                ...city,
-                route:city.route.name
-            };
-        });
+        return cities.map(({ customers, ...city }) => ({
+            ...city,
+            route: city.route.name
+        }));
     };
 
     const handleSnackbarError = (message) => {
@@ -117,7 +175,7 @@ const MasterData = () => {
     const handleOpenForm = (type, rowData = {}) => {
         // Open form for adding/editing data
         setDataType(type);
-        setFormData(rowData);
+        setFormData({ ...rowData, obsolete: rowData.obsolete || 0 });
         setEditMode(!!rowData.id);
         setOpenForm(true);
     };
@@ -135,9 +193,13 @@ const MasterData = () => {
     };
 
     const handleSubmitForm = () => {
-        // Handle form submission (create/update data)
+        const payload = {
+            ...formData,
+            obsolete: false  // Ensure 'obsolete' is always set to false
+        };
+        console.log("payload",payload);
         const apiCall = editMode ? updateData : createData;
-        apiCall(dataType, formData.id, formData)
+        apiCall(dataType,formData.id,payload)
             .then(() => {
                 handleSnackbarSuccess(`${dataType} ${editMode ? 'updated' : 'created'} successfully`);
                 fetchData(dataType);
@@ -202,13 +264,15 @@ const MasterData = () => {
                 ))}
                 {dataType && (
                     <Grid item>
-                        <Button variant="contained" color='success' onClick={() => handleOpenForm(dataType)}>Add New {dataType.charAt(0).toUpperCase() + dataType.slice(1,dataType.length-1)}</Button>
+                        <Button variant="contained" color="success" onClick={() => handleOpenForm(dataType)}>Add New {dataType.charAt(0).toUpperCase() + dataType.slice(1, -1)}</Button>
                     </Grid>
                 )}
             </Grid>
             {dataType && (
                 <>
                     <Typography variant="h5" gutterBottom style={{ marginTop: '20px' }}>{dataType.charAt(0).toUpperCase() + dataType.slice(1)}</Typography>
+                    <Grid container spacing={2} alignItems="center">
+                <Grid item>
                     <TextField
                         style={{ marginBottom: '10px' }}
                         variant="outlined"
@@ -222,6 +286,13 @@ const MasterData = () => {
                             ),
                         }}
                     />
+                </Grid>
+                <Grid item>
+                    <Typography variant="body1" color="error">
+                        {expirationMessage}
+                    </Typography>
+                </Grid>
+            </Grid>
                     <TableContainer component={Paper}>
                         <Table>
                             <TableHead>
@@ -234,18 +305,13 @@ const MasterData = () => {
                                                 className={dynamicSortIcon(key)}
                                             ></TableSortLabel>
                                             {key.replace(/([a-z])([A-Z])/g, '$1 $2').toUpperCase()}
-                                            <TableSortLabel
-                                                active={sortConfig.key === key}
-                                                direction={sortConfig.key === key ? sortConfig.direction : 'asc'}
-                                                className={dynamicSortIcon(key)}
-                                            ></TableSortLabel>
-                                            </TableCell>
+                                        </TableCell>
                                     ))}
                                     <TableCell>Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                            {data.filter((row) =>
+                                {data.filter((row) =>
                                     Object.values(row).some(
                                         (value) =>
                                             String(value).toLowerCase().includes(searchTerm.toLowerCase())
@@ -270,31 +336,86 @@ const MasterData = () => {
                     </TableContainer>
                 </>
             )}
-            <Dialog open={openForm} onClose={handleCloseForm}>
-                <DialogTitle>{editMode ? `Edit ${dataType.charAt(0).toUpperCase() + dataType.slice(1)}` : `Add New ${dataType.charAt(0).toUpperCase() + dataType.slice(1)}`}</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        Please fill out the form below to {editMode ? 'update' : 'add'} the {dataType}.
-                    </DialogContentText>
-                    {Object.keys(data[0] || {}).map(key => (
-                        key !== 'id' && (
-                            <TextField
-                                key={key}
-                                margin="dense"
-                                label={key.charAt(0).toUpperCase() + key.slice(1)}
-                                name={key}
-                                fullWidth
+           <Dialog open={openForm} onClose={handleCloseForm}>
+    <DialogTitle>
+        {editMode ? `Edit ${dataType.charAt(0).toUpperCase() + dataType.slice(1)}` : `Add New ${dataType.charAt(0).toUpperCase() + dataType.slice(1)}`}
+    </DialogTitle>
+    <DialogContent>
+        <DialogContentText>
+            Please fill out the form below to {editMode ? 'update' : 'add'} the {dataType}.
+        </DialogContentText>
+        {Object.keys(data[0] || {}).map(key => {
+            if (key !== 'id' && key !== 'obsolete') {
+                if (dataType === 'customers' && key === 'city') {
+                    return (
+                        <FormControl key={key} fullWidth margin="dense">
+                            <InputLabel>{key.charAt(0).toUpperCase() + key.slice(1)}</InputLabel>
+                            <Select
                                 value={formData[key] || ''}
+                                name={key}
                                 onChange={handleFormChange}
-                            />
-                        )
-                    ))}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseForm} color="primary">Cancel</Button>
-                    <Button onClick={handleSubmitForm} color="primary">{editMode ? 'Update' : 'Add'}</Button>
-                </DialogActions>
-            </Dialog>
+                            >
+                                {cities.map(city => (
+                                    <MenuItem key={city.id} value={city.id}>{city.name}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    );
+                }
+                if ((dataType === 'customers' || dataType === 'cities') && key === 'route') {
+                    return (
+                        <FormControl key={key} fullWidth margin="dense">
+                            <InputLabel>{key.charAt(0).toUpperCase() + key.slice(1)}</InputLabel>
+                            <Select
+                                value={formData[key] || ''}
+                                name={key}
+                                onChange={handleFormChange}
+                            >
+                                {routes.map(route => (
+                                    <MenuItem key={route.id} value={route.id}>{route.name}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    );
+                }
+                if (dataType === 'vehicles' && (key === 'passingDate' || key === 'insuranceDate' || key === 'fitnessDate' || key === 'pucdate')) {
+                    return (
+                        <TextField
+                            key={key}
+                            margin="dense"
+                            label={key.charAt(0).toUpperCase() + key.slice(1)}
+                            name={key}
+                            type="date"
+                            fullWidth
+                            value={formData[key] || ''}
+                            onChange={handleFormChange}
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                        />
+                    );
+                }
+                return (
+                    <TextField
+                        key={key}
+                        margin="dense"
+                        label={key.charAt(0).toUpperCase() + key.slice(1)}
+                        name={key}
+                        fullWidth
+                        value={formData[key] || ''}
+                        onChange={handleFormChange}
+                    />
+                );
+            }
+            return null;
+        })}
+    </DialogContent>
+    <DialogActions>
+        <Button onClick={handleCloseForm} color="primary">Cancel</Button>
+        <Button onClick={handleSubmitForm} color="primary">{editMode ? 'Update' : 'Add'}</Button>
+    </DialogActions>
+</Dialog>
+
             <Snackbar
                 open={snackbarOpen}
                 autoHideDuration={6000}

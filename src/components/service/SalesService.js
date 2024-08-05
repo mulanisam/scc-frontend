@@ -1,20 +1,45 @@
 import axios from 'axios';
+import { API_BASE_URL } from './../common/axiosConfig.js'
 
-const API_BASE_URL = 'https://scc-backend-production.up.railway.app:8080'; // Replace with your API base URL
+const getToken = () => localStorage.getItem('token');
 
-const getRoutes = () => axios.get(`${API_BASE_URL}/user/routes`);
+const getRoutes = () => {
+  return axios.get(`${API_BASE_URL}/user/routes`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+};
 
-const getDrivers = () => axios.get(`${API_BASE_URL}/user/drivers`);
-const getVehicles = () => axios.get(`${API_BASE_URL}/user/vehicles`);
+const getDrivers = () => {
+  return axios.get(`${API_BASE_URL}/user/drivers`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+};
 
-const getCustomersByRoute = (routeId) => axios.get(`${API_BASE_URL}/user/customers/byRoute/${routeId}`);
+const getVehicles = () => {
+  return axios.get(`${API_BASE_URL}/user/vehicles`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+};
 
-const createSalesEntry = (salesEntry) => axios.post(`${API_BASE_URL}/user/sales/bulk`, salesEntry);
+const getCustomersByRoute = (routeId) => {
+  return axios.get(`${API_BASE_URL}/user/customers/byRoute/${routeId}`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+};
+
+const createSalesEntry = (salesEntry) => {
+  return axios.post(`${API_BASE_URL}/user/sales/bulk`, salesEntry, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`
+    }
+  });
+};
 
 export {
-    getRoutes,
-    getDrivers,
-    getCustomersByRoute,
-    createSalesEntry,
-    getVehicles,
+  getRoutes,
+  getDrivers,
+  getCustomersByRoute,
+  createSalesEntry,
+  getVehicles
 };
