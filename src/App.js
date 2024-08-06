@@ -1,22 +1,38 @@
-// App.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Navbar from './components/common/Navbar';
-import FooterComponent from './components/common/Footer';
 import LoginPage from './components/auth/LoginPage';
 import RegistrationPage from './components/auth/RegistrationPage';
-import UserManagementPage from './components/userspage/UserManagementPage';
+import FooterComponent from './components/common/Footer';
+import UserService from './components/service/UserService';
 import UpdateUser from './components/userspage/UpdateUser';
+import UserManagementPage from './components/userspage/UserManagementPage';
 import ProfilePage from './components/userspage/ProfilePage';
 import SalesEntry from './components/sale/SalesEntry';
 import PurchaseEntryPage from './components/purchase/PurchaseEntry';
 import MasterData from './components/masterData/MasterData';
-import Dashboard from './components/dashboard/Dashboard'; // New Dashboard component
-import UserService from './components/service/UserService'; // Ensure UserService is correctly implemented
+import Dashboard from './components/common/Dashboard';
 
 function App() {
-  const isAuthenticated = UserService.isAuthenticated(); // Assuming you have an authentication check method
-  const isAdmin = UserService.isAdmin(); // Assuming you have an admin check method
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = () => {
+      setIsAuthenticated(UserService.isAuthenticated());
+      setIsAdmin(UserService.adminOnly());
+    };
+
+    checkAuth();
+
+    // Add an event listener to update the authentication status on storage change
+    window.addEventListener('storage', checkAuth);
+
+    // Cleanup the event listener on component unmount
+    return () => {
+      window.removeEventListener('storage', checkAuth);
+    };
+  }, []);
 
   return (
     <BrowserRouter>
@@ -24,30 +40,25 @@ function App() {
         <Navbar />
         <div className="content">
           <Routes>
-            {/* Public routes */}
             <Route path="/" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={isAdmin ? <RegistrationPage /> : <Navigate to="/" />} />
-
-            {/* Protected routes */}
             {isAuthenticated && (
               <>
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/sale" element={<SalesEntry />} />
                 <Route path="/purchase" element={<PurchaseEntryPage />} />
                 <Route path="/master-data" element={<MasterData />} />
-                
                 {isAdmin && (
                   <>
+                    <Route path="/register" element={<RegistrationPage />} />
                     <Route path="/admin/user-management" element={<UserManagementPage />} />
                     <Route path="/update-user/:userId" element={<UpdateUser />} />
                   </>
                 )}
               </>
             )}
-
-            {/* Catch-all route */}
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
           </Routes>
         </div>
         <FooterComponent />

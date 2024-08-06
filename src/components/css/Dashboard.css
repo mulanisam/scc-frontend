@@ -1,0 +1,45 @@
+.dashboard-container {
+    padding: 20px;
+}
+
+.datetime {
+    margin-bottom: 20px;
+    font-weight: bold;
+}
+
+.business-card-container {
+    margin-bottom: 20px;
+}
+
+.business-card {
+    height: 80px; /* Half the height of existing cards */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #ff7043;
+    color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.business-name {
+    font-weight: bold;
+    color: black;
+}
+
+
+.dashboard-card {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.card-header {
+    background-color: #ffb74d;
+    color: black;
+    text-align: center;
+    font-weight: bold;
+}
+
+.card-content {
+    background-color: #ffcc80;
+    text-align: center;
+    color: black;
+}

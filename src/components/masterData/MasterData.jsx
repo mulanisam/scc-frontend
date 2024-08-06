@@ -254,7 +254,7 @@ const MasterData = () => {
     };
 
     return (
-        <Container style={{ height: '100vh', overflow: 'auto' }}>
+        <Container style={{ height: 'auto', overflow: 'auto' }}>
             <Typography variant="h4" gutterBottom>Master Data Management</Typography>
             <Grid container spacing={2}>
                 {dataTypes.map(type => (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Container,
     Grid,
@@ -21,12 +21,12 @@ import {
     Snackbar,
     Alert,
 } from '@mui/material';
-import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles } from '../service/SalesService'; // Ensure this path is correct
+import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles } from '../service/SalesService';
 import UserService from '../service/UserService';
 import { Navigate } from 'react-router-dom';
 
 const SalesEntry = () => {
-    const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10)); // Auto-select today's date
+    const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
     const [routes, setRoutes] = useState([]);
     const [selectedRoute, setSelectedRoute] = useState('');
     const [drivers, setDrivers] = useState([]);
@@ -40,58 +40,70 @@ const SalesEntry = () => {
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
     useEffect(() => {
-        if(!UserService.isAuthenticated()){
-            window.location.href = '/'; 
+        if (!UserService.isAuthenticated()) {
+            return <Navigate to="/" />;
         }
-        getRoutes()
-            .then(response => setRoutes(response.data))
-            .catch(error => console.error('Error fetching routes:', error));
 
-        getDrivers()
-            .then(response => setDrivers(response.data))
-            .catch(error => console.error('Error fetching drivers:', error));
+        const fetchData = async () => {
+            try {
+                const [routesResponse, driversResponse, vehiclesResponse] = await Promise.all([
+                    getRoutes(),
+                    getDrivers(),
+                    getVehicles()
+                ]);
+                setRoutes(routesResponse.data);
+                setDrivers(driversResponse.data);
+                setVehicles(vehiclesResponse.data);
+            } catch (error) {
+                console.error('Error fetching initial data:', error);
+            }
+        };
 
-        getVehicles()
-            .then(response => setVehicles(response.data))
-            .catch(error => console.error('Error fetching vehicles:', error));
-        
-            
+        fetchData();
     }, []);
 
     useEffect(() => {
-        if (selectedRoute) {
-            getCustomersByRoute(selectedRoute)
-                .then(response => {
-                    setCustomers(response.data);
-                    setSalesData(response.data.map(customer => ({
+        const fetchCustomers = async () => {
+            if (selectedRoute) {
+                try {
+                    const response = await getCustomersByRoute(selectedRoute);
+                    const initialSalesData = response.data.map(customer => ({
                         customerId: customer.id,
                         kilograms: '',
                         rate: '',
                         amount: 0,
-                        paymentMode: '',
+                        paymentMode: 'cash',
                         payment: 0,
                         pending: 0,
                         description: '',
-                    })));
-                })
-                .catch(error => console.error('Error fetching customers:', error));
-        }
+                    }));
+                    setCustomers(response.data);
+                    setSalesData(initialSalesData);
+                } catch (error) {
+                    console.error('Error fetching customers:', error);
+                }
+            }
+        };
+
+        fetchCustomers();
     }, [selectedRoute]);
 
-    const handleSalesDataChange = (index, field, value) => {
-        const newData = [...salesData];
-        newData[index] = {
-            ...newData[index],
-            [field]: value,
-        };
-        if (field === 'rate' || field === 'kilograms') {
-            newData[index].amount = newData[index].rate * newData[index].kilograms;
-        }
-        newData[index].pending = newData[index].amount - newData[index].payment;
-        setSalesData(newData);
-    };
+    const handleSalesDataChange = useCallback((index, field, value) => {
+        setSalesData(prevSalesData => {
+            const newData = [...prevSalesData];
+            newData[index] = {
+                ...newData[index],
+                [field]: value,
+            };
+            if (field === 'rate' || field === 'kilograms') {
+                newData[index].amount = newData[index].rate * newData[index].kilograms;
+            }
+            newData[index].pending = newData[index].amount - newData[index].payment;
+            return newData;
+        });
+    }, []);
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!selectedRoute || !selectedDriver || !selectedVehicle) {
             setSnackbarMessage('Route, Driver, and Vehicle are mandatory fields.');
             setSnackbarSeverity('error');
@@ -99,7 +111,6 @@ const SalesEntry = () => {
             return;
         }
 
-        // Filter out customers with incomplete data
         const completedSalesData = salesData.filter(customerData =>
             customerData.kilograms !== '' &&
             customerData.rate !== ''
@@ -113,18 +124,17 @@ const SalesEntry = () => {
             salesDetails: completedSalesData
         };
 
-        createSalesEntry(salesEntry)
-            .then(response => {
-                setSnackbarMessage('Sales entry created successfully');
-                setSnackbarSeverity('success');
-                setSnackbarOpen(true);
-                window.location.reload();  
-            })
-            .catch(error => {
-                setSnackbarMessage('Error creating sales entry');
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-            });
+        try {
+            await createSalesEntry(salesEntry);
+            setSnackbarMessage('Sales entry created successfully');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            handleClear(); // Clear form on success
+        } catch (error) {
+            setSnackbarMessage('Error creating sales entry');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
     };
 
     const handleCloseSnackbar = (event, reason) => {
@@ -142,7 +152,7 @@ const SalesEntry = () => {
     };
 
     return (
-        <Container style={{ height: '100vh', overflow: 'auto' }}>
+        <Container>
             <Typography variant="h4" gutterBottom>Sales Entry</Typography>
             <Grid container spacing={4}>
                 <Grid item xs={12} md={3}>
@@ -292,9 +302,6 @@ const SalesEntry = () => {
                 <Grid item>
                     <Button variant="contained" color="secondary" onClick={handleClear}>Clear</Button>
                 </Grid>
-                {/* <Grid item>
-                    <Button variant="contained" color="success">Add new customer</Button>
-                </Grid> */}
             </Grid>
             <Snackbar
                 open={snackbarOpen}

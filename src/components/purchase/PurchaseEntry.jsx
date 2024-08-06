@@ -183,7 +183,7 @@ const PurchaseEntryPage = () => {
 };
 
   return (
-    <div style={{ height: 'calc(100vh - 64px)', overflow: 'auto' }}>
+    <div style={{ height: 'auto', overflow: 'auto' }}>
       <Container>
         <Typography variant="h4" gutterBottom>
           Purchase Entry

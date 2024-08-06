@@ -19,7 +19,7 @@ const handleSubmit = async (e) => {
             localStorage.setItem('token', userData.token)
             localStorage.setItem('role', userData.role)
             window.dispatchEvent(new Event('storage'));
-            navigate('/sale')
+            navigate('/dashboard')
         }else{
             setError(userData.message)
         }

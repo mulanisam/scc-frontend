@@ -21,7 +21,7 @@ function Navbar() {
         const confirmLogout = window.confirm('Are you sure you want to logout this user?');
         if (confirmLogout) {
             UserService.logout();
-            window.location.href = '/'; // Redirect to the homepage after logging out
+            window.location.href = '/login'; // Redirect to the homepage after logging out
         }
     };
 
@@ -29,7 +29,8 @@ function Navbar() {
     return (
         <nav>
             <ul>
-                {!isAuthenticated && <li><Link to="/">Chicken Xpress</Link></li>}
+                {!isAuthenticated && <li><Link to="/">SOHEL CHICKEN AND EGGS</Link></li>}
+                {isAuthenticated && <li><Link to="/dashboard">Dashboard</Link></li>}
                 {isAuthenticated && <li><Link to="/sale">Sale</Link></li>}
                 {isAuthenticated && <li><Link to="/purchase">Purchase</Link></li>}
                 {isAuthenticated && <li><Link to="/master-data">Masters</Link></li>}
