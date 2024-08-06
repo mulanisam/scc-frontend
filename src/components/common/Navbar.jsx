@@ -1,12 +1,22 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import UserService from '../service/UserService';
 
 function Navbar() {
     
-    const isAuthenticated = UserService.isAuthenticated();
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     //const isAdmin = UserService.isAdmin();
-console.log("isAuthenticated",isAuthenticated);
+    useEffect(() => {
+        const handleStorageChange = () => {
+            setIsAuthenticated(UserService.isAuthenticated());
+        };
+        window.addEventListener('storage', handleStorageChange);
+
+        // Clean up event listener on component unmount
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, []);
     const handleLogout = () => {
         const confirmLogout = window.confirm('Are you sure you want to logout this user?');
         if (confirmLogout) {
