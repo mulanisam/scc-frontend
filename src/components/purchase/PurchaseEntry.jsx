@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Typography, TextField, Grid, Button, MenuItem, IconButton,Snackbar,Alert } from '@mui/material';
+import { Container, Typography, TextField, Grid, Button, MenuItem, IconButton,Snackbar,Alert, Dialog,DialogTitle, DialogContent, DialogContentText} from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase } from '../service/PurchaseService';
+import { fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase, fetchPurchaseDetails,submitPayment} from '../service/PurchaseService';
 
 const PurchaseEntryPage = () => {
   const [tableRows, setTableRows] = useState([{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]);
@@ -30,6 +30,29 @@ const PurchaseEntryPage = () => {
   const [drivers, setDrivers] = useState([]);
   const [files, setFiles] = useState([]);
 
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState({
+    dateOfPurchase: '',
+    dateOfTransaction: '',
+    trans_id: '',
+    totalAmount: '',
+    paidAmount: '',
+    pendingPayment: '',
+    comment: '',
+    supplier: ''
+  });
+  const clearPaymentData = () => {
+    setPaymentData({
+      dateOfPurchase: '',
+      dateOfTransaction: '',
+      trans_id: '',
+      totalAmount: '',
+      paidAmount: '',
+      pendingPayment: '',
+      comment: '',
+      supplier: ''
+    });
+  };
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -134,6 +157,7 @@ const PurchaseEntryPage = () => {
     files.forEach((file, index) => {
       data.append(`files`, file);
     });
+    
 
     try {
       
@@ -182,15 +206,73 @@ const PurchaseEntryPage = () => {
     setSnackbarOpen(false);
 };
 
+const handleOpenPaymentDialog = () => {
+  setPaymentDialogOpen(true);
+};
+
+const handleClosePaymentDialog = () => {
+  clearPaymentData();
+  setPaymentDialogOpen(false);
+};
+
+const handlePaymentChange = async (event) => {
+  const { name, value } = event.target;
+  const newPaymentData = { ...paymentData, [name]: value };
+
+  if ((name === 'supplier' && newPaymentData.dateOfPurchase) || (name === 'dateOfPurchase' && newPaymentData.supplier)) {
+    try {
+      const purchaseDetails = await fetchPurchaseDetails(newPaymentData.supplier, newPaymentData.dateOfPurchase);
+      newPaymentData.totalAmount = purchaseDetails.totalAmount || 0;
+      newPaymentData.paidAmount = purchaseDetails.paidAmount || 0;
+      newPaymentData.pendingPayment = (parseFloat(newPaymentData.totalAmount) - parseFloat(newPaymentData.paidAmount)).toFixed(2);
+    } catch (error) {
+      setSnackbarMessage('Error fetching purchase details.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  } else {
+    if (name === 'totalAmount' || name === 'paidAmount') {
+      const totalAmount = parseFloat(newPaymentData.totalAmount) || 0;
+      const paidAmount = parseFloat(newPaymentData.paidAmount) || 0;
+      newPaymentData.pendingPayment = (totalAmount - paidAmount).toFixed(2);
+    }
+  }
+
+  setPaymentData(newPaymentData);
+};
+
+
+const handlePaymentSubmit = async (event) => {
+  event.preventDefault();
+  try {
+      
+    submitPayment(paymentData).then
+    (response => {
+             setSnackbarMessage('Payment Entry created successfully');
+             setSnackbarSeverity('success');
+             setSnackbarOpen(true);
+             clearPaymentData();
+           }).catch(error => {
+             setSnackbarMessage('Error creating Payment Entry');
+             setSnackbarSeverity('error');
+             setSnackbarOpen(true);
+       });
+ } catch (error) {
+             setSnackbarMessage('Error creating Payment Entry');
+             setSnackbarSeverity('error');
+             setSnackbarOpen(true);
+ }
+};
+
   return (
-    <div style={{ height: 'auto', overflow: 'auto' }}>
+    <div style={{ height: 'calc(100vh - 64px)', overflow: 'auto' }}>
       <Container>
         <Typography variant="h4" gutterBottom>
           Purchase Entry
         </Typography>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField
                 label="Entry Date"
                 type="date"
@@ -201,7 +283,7 @@ const PurchaseEntryPage = () => {
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField select label="Vehicle No" fullWidth name="vehicle" value={formData.vehicle} onChange={handleChange} required>
                 {vehicles.map((vehicle) => (
                   <MenuItem key={vehicle.id} value={vehicle.id}>
@@ -210,7 +292,7 @@ const PurchaseEntryPage = () => {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField select label="Driver" fullWidth name="driver" value={formData.driver} onChange={handleChange} required>
                 {drivers.map((driver) => (
                   <MenuItem key={driver.id} value={driver.id}>
@@ -219,7 +301,7 @@ const PurchaseEntryPage = () => {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField select label="Supplier" fullWidth name="supplier" value={formData.supplier} onChange={handleChange} required>
                 {suppliers.map((supplier) => (
                   <MenuItem key={supplier.id} value={supplier.id}>
@@ -228,16 +310,16 @@ const PurchaseEntryPage = () => {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField label="Branch" fullWidth name="branch" value={formData.branch} onChange={handleChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField label="Farm" fullWidth name="farm" value={formData.farm} onChange={handleChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField label="Supervisor Name" fullWidth name="supervisorName" value={formData.supervisorName} onChange={handleChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={3}>
               <TextField
                 label="Supervisor Phone No"
                 type="number"
@@ -370,6 +452,11 @@ const PurchaseEntryPage = () => {
             <Grid item>
               <Button variant="contained" color="secondary" type="reset" onClick={handleClear}>Clear</Button>
             </Grid>
+            <Grid item >
+              <Button variant="contained" color="primary" onClick={handleOpenPaymentDialog}>
+                Payment Details
+              </Button>
+            </Grid>
           </Grid>
         </form>
         <Snackbar
@@ -382,6 +469,131 @@ const PurchaseEntryPage = () => {
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
+            <Dialog open={paymentDialogOpen} onClose={handleClosePaymentDialog}>
+  <DialogTitle>Payment Details</DialogTitle>
+  <DialogContent>
+    <DialogContentText>
+      Please fill in the payment details for the purchase.
+    </DialogContentText>
+    <form onSubmit={handlePaymentSubmit}>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <TextField
+            label="Supplier"
+            select
+            fullWidth
+            name="supplier"
+            value={paymentData.supplier}
+            onChange={handlePaymentChange}
+            required
+          >
+            {suppliers.map((supplier) => (
+              <MenuItem key={supplier.id} value={supplier.id}>
+                {supplier.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Date of Purchase"
+            type="date"
+            name="dateOfPurchase"
+            value={paymentData.dateOfPurchase}
+            onChange={handlePaymentChange}
+            required
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Date of Transaction"
+            type="date"
+            name="dateOfTransaction"
+            value={paymentData.dateOfTransaction}
+            onChange={handlePaymentChange}
+            required
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Transaction ID"
+            name="trans_id"
+            value={paymentData.trans_id}
+            onChange={handlePaymentChange}
+            required
+            fullWidth
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Total Amount"
+            type="number"
+            name="totalAmount"
+            value={paymentData.totalAmount}
+            onChange={handlePaymentChange}
+            required
+            fullWidth
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Paid Amount"
+            type="number"
+            name="paidAmount"
+            value={paymentData.paidAmount}
+            onChange={handlePaymentChange}
+            required
+            fullWidth
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Pending Payment"
+            type="number"
+            name="pendingPayment"
+            value={paymentData.pendingPayment}
+            onChange={handlePaymentChange}
+            required
+            fullWidth
+            InputProps={{ readOnly: true }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Comment"
+            name="comment"
+            value={paymentData.comment}
+            onChange={handlePaymentChange}     
+            fullWidth
+            multiline
+            rows={3}
+          />
+        </Grid>
+      </Grid>
+      <Grid container spacing={2} style={{ marginTop: '20px' }}>
+        <Grid item xs={4}>
+          <Button variant="contained" color="primary" type="submit">
+            Submit
+          </Button>
+        </Grid>
+        <Grid item xs={4}>
+            <Button variant="contained" color="warning" onClick={clearPaymentData}>
+              Clear
+            </Button>
+          </Grid>
+        <Grid item xs={4}>
+          <Button variant="contained" color="error" onClick={handleClosePaymentDialog}>
+            Close
+          </Button>
+        </Grid>
+      </Grid>
+    </form>
+  </DialogContent>
+</Dialog>
       </Container>
     </div>
   );

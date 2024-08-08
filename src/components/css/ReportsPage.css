@@ -1,0 +1,31 @@
+/* Container holding report type, subtype, and date filters */
+.MuiContainer-root {
+    margin-top: 20px;
+  }
+  
+  /* Make buttons smaller and icons aligned properly */
+  .MuiIconButton-root {
+    padding: 8px;
+    font-size: 24px;
+  }
+  
+  /* Keep PDF and Excel download buttons close to each other */
+  .download-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 20px;
+  }
+  
+  /* Ensure the search and clear icons are close together */
+  .search-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  
+  /* Add some margin around the report table */
+  .report-table {
+    margin-top: 20px;
+  }
+  

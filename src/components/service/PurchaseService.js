@@ -41,6 +41,20 @@ export const submitPurchase = async (formData) => {
     throw error;
   }
 };
+export const submitPayment= async (formData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/user/purchases/payment`, formData, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting payment entry:', error);
+    throw error;
+  }
+};
 
 export const fetchDrivers = async () => {
   try {
@@ -50,6 +64,21 @@ export const fetchDrivers = async () => {
     return response.data;
   } catch (error) {
     console.error('Error fetching drivers:', error);
+    throw error;
+  }
+};
+export const fetchPurchaseDetails = async (supplierId, purchaseDate) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/user/purchases/getDetails`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+      params: {
+        supplierId: supplierId,
+        entryDate: purchaseDate
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching purchase details:', error);
     throw error;
   }
 };

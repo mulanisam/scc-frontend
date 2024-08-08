@@ -34,7 +34,7 @@ function Navbar() {
                 {isAuthenticated && <li><Link to="/sale">Sale</Link></li>}
                 {isAuthenticated && <li><Link to="/purchase">Purchase</Link></li>}
                 {isAuthenticated && <li><Link to="/master-data">Masters</Link></li>}
-                {isAuthenticated && <li><Link to="/profile">Profile</Link></li>}
+                {isAuthenticated && <li><Link to="/reports">Reports</Link></li>}
                 {/* {isAdmin && <li><Link to="/admin/user-management">User Management</Link></li>} */}
                 {isAuthenticated && <li><Link to="/" onClick={handleLogout}>Logout</Link></li>}
             </ul>

@@ -7,7 +7,7 @@ import FooterComponent from './components/common/Footer';
 import UserService from './components/service/UserService';
 import UpdateUser from './components/userspage/UpdateUser';
 import UserManagementPage from './components/userspage/UserManagementPage';
-import ProfilePage from './components/userspage/ProfilePage';
+import Reports from './components/common/Reports';
 import SalesEntry from './components/sale/SalesEntry';
 import PurchaseEntryPage from './components/purchase/PurchaseEntry';
 import MasterData from './components/masterData/MasterData';
@@ -45,7 +45,7 @@ function App() {
             {isAuthenticated && (
               <>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/reports" element={<Reports />} />
                 <Route path="/sale" element={<SalesEntry />} />
                 <Route path="/purchase" element={<PurchaseEntryPage />} />
                 <Route path="/master-data" element={<MasterData />} />
