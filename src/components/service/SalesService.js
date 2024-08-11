@@ -26,6 +26,7 @@ const getCustomersByRoute = (routeId) => {
     headers: { Authorization: `Bearer ${getToken()}` }
   });
 };
+ 
 
 const createSalesEntry = (salesEntry) => {
   return axios.post(`${API_BASE_URL}/user/sales/bulk`, salesEntry, {
@@ -36,10 +37,26 @@ const createSalesEntry = (salesEntry) => {
   });
 };
 
+const saveDialogData = (salesDetails) => {
+  return axios.post(`${API_BASE_URL}/user/sales/saveDetails`, salesDetails, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`
+    }
+  });
+};
+ 
+const getSaleDetailsByCriteria  = (date, route, vehicle, driver) => {
+  return axios.get(`${API_BASE_URL}/user/sales/saleDetails`, { params: { date, route, vehicle, driver } },{
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+};
 export {
   getRoutes,
   getDrivers,
   getCustomersByRoute,
   createSalesEntry,
-  getVehicles
+  getVehicles,
+  saveDialogData,
+  getSaleDetailsByCriteria
 };

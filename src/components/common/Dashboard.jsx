@@ -18,15 +18,15 @@ const Dashboard = () => {
         todaysSales: 0,
         pendingAmount: 0,
         balanceRecovery: 0,
-        totalPending: 0,
+        totalBalance: 0,
         maxPending: 0,
-        abc1: 0,
-        abc2: 0,
-        abc3: 0,
-        abc4: 0,
-        abc5: 0,
-        abc6: 0,
-        abc7: 0,
+        monthlySale: 0,
+        dieselDaily: 0,
+        dieselMonthly: 0,
+        driverExpenses: 0,
+        monthlyDriverExpenses: 0,
+        farmBirds: 0,
+        saleFromFarm: 0,
     });
 
     useEffect(() => {
