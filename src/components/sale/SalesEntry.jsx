@@ -15,14 +15,9 @@ import {
     Paper,
     Typography,
     Snackbar,
-    Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    FormControl,
+    Alert
 } from '@mui/material';
-import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, saveDialogData, getSaleDetailsByCriteria } from '../service/SalesService';
+import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getSaleDetailsByCriteria } from '../service/SalesService';
 import UserService from '../service/UserService';
 import { Navigate } from 'react-router-dom';
 
@@ -39,20 +34,12 @@ const SalesEntry = () => {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+    const [totalBirds, setTotalBirds] = useState('');
+    const [mortality, setMortality] = useState('');
+    const [returnToFarm, setReturnToFarm] = useState('');
+    const [description, setDescription] = useState('');
 
-    // State for the Sale Details dialog
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogData, setDialogData] = useState({
-        date: '',
-        route:'',
-        vehicle: '',
-        driver: '',
-        totalBirds: '',
-        mortality: '',
-        returnToFarm: '',
-        description: ''
-    });
-
+    const isFormValid = selectedRoute && selectedDriver && selectedVehicle && date;
     useEffect(() => {
         if (!UserService.isAuthenticated()) {
             return <Navigate to="/" />;
@@ -104,6 +91,28 @@ const SalesEntry = () => {
         fetchCustomers();
     }, [selectedRoute]);
 
+    useEffect(() => {
+        const fetchSaleDetails = async () => {
+            if (isFormValid) {
+                try {
+                    const response = await getSaleDetailsByCriteria(date, selectedRoute, selectedVehicle, selectedDriver);
+                    if (response.data) {
+                        const details = response.data;
+                        setTotalBirds(details.totalBirds || '');
+                        setMortality(details.mortality || '');
+                        setReturnToFarm(details.returnToFarm || '');
+                        setDescription(details.description || '');
+                        //setSalesData(details.salesDetails || []);
+                    }
+                } catch (error) {
+                    console.error('Error fetching sale details:', error);
+                }
+            }
+        };
+
+        fetchSaleDetails();
+    }, [date, selectedRoute, selectedVehicle, selectedDriver, isFormValid]);
+
     const handleSalesDataChange = useCallback((index, field, value) => {
         setSalesData(prevSalesData => {
             const newData = [...prevSalesData];
@@ -128,26 +137,40 @@ const SalesEntry = () => {
         }
 
         const completedSalesData = salesData.filter(customerData =>
+            customerData.birds !== '' &&
             customerData.kilograms !== '' &&
             customerData.rate !== ''
         );
-
+        const totals = calculateTotals();
+        console.log();
         const salesEntry = {
             date,
             route: selectedRoute,
             driver: selectedDriver,
             vehicleNo: selectedVehicle,
-            salesDetails: completedSalesData
+            salesDetails: completedSalesData,
+
+            totalBirds: Number(totalBirds),
+            mortality: Number(mortality),
+            returnToFarm: Number(returnToFarm),
+            description,
+            totalBirdSale: totals.birds,
+            totalKilogramSale: totals.kilograms,
+            totalAmount: totals.amount,
+            totalPaymentReceived: totals.payment,
+            totalPending: totals.pending
         };
+        
 
         try {
+            console.log("salesEntry: ",salesEntry);
             await createSalesEntry(salesEntry);
             setSnackbarMessage('Sales entry created successfully');
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
             handleClear(); // Clear form on success
         } catch (error) {
-            setSnackbarMessage('Error creating sales entry',error);
+            setSnackbarMessage('Error creating sales entry');
             setSnackbarSeverity('error');
             setSnackbarOpen(true);
         }
@@ -164,8 +187,13 @@ const SalesEntry = () => {
         setSelectedRoute('');
         setSelectedDriver('');
         setSelectedVehicle('');
+        setTotalBirds('');
+        setMortality('');
+        setReturnToFarm('');
+        setDescription('');
         setSalesData([]);
     };
+
     const calculateTotals = () => {
         return salesData.reduce(
             (totals, data) => {
@@ -187,99 +215,12 @@ const SalesEntry = () => {
             }
         );
     };
-    
-
-    // Functions to open/close the Sale Details dialog
-    const handleDialogOpen = async () => {
-        if (!date || !selectedRoute || !selectedVehicle || !selectedDriver) {
-            setSnackbarMessage('Please select Date, Route, Vehicle, and Driver before opening Sale Details.');
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            return;
-        }
-    
-        try {
-            // Fetch existing sale details based on selected criteria
-            const response = await getSaleDetailsByCriteria(date, selectedRoute, selectedVehicle, selectedDriver);
-            if (response.data) {
-                // If data exists, pre-fill dialog fields
-                setDialogData({
-                    date: date,
-                    route: selectedRoute,
-                    vehicle: selectedVehicle,
-                    driver: selectedDriver,
-                    totalBirds: response.data.totalBirds || '',
-                    mortality: response.data.mortality || '',
-                    returnToFarm: response.data.returnToFarm || '',
-                    description: response.data.description || '',
-                });
-            } else {
-                // If no existing data, set default empty values
-                setDialogData({
-                    date: date,
-                    route: selectedRoute,
-                    vehicle: selectedVehicle,
-                    driver: selectedDriver,
-                    totalBirds: '',
-                    mortality: '',
-                    returnToFarm: '',
-                    description: '',
-                });
-            }
-            setDialogOpen(true);
-        } catch (error) {
-            console.error('Error fetching sale details:', error);
-            setSnackbarMessage('Error fetching sale details');
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        }
-    };
-    
-    const handleDialogClose = () => {
-        setDialogData({
-            date: '',
-            route:'',
-            vehicle: '',
-            driver: '',
-            totalBirds: '',
-            mortality: '',
-            returnToFarm: '',
-            description: ''
-        });
-        setDialogOpen(false);
-    };
-    
-    const handleDialogDataChange = (field, value) => {
-        setDialogData(prevData => ({
-            ...prevData,
-            [field]: value
-        }));
-    };
-    
-    const handleDialogSubmit = async () => {
-        try {
-            // Make the API call to save dialog data
-            await saveDialogData(dialogData);  // You need to create this service method
-    
-            // Clear the data and close the dialog
-            handleDialogClose();
-            setSnackbarMessage('Sales details saved successfully');
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-            handleClear(); // Clear form on success
-        } catch (error) {
-            setSnackbarMessage('Error saving sale details: ',error);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        }
-    };
-    
 
     return (
         <Container>
-            <Typography variant="h4" gutterBottom>Sales Entry</Typography>
+             <Typography variant="h4" gutterBottom>Sales Entry</Typography>
             <Grid container spacing={6}>
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={3}>
                     <TextField
                         label="Date"
                         type="date"
@@ -289,7 +230,7 @@ const SalesEntry = () => {
                         onChange={(e) => setDate(e.target.value)}
                     />
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={3}>
                     <Select
                         label="Route"
                         fullWidth
@@ -304,7 +245,7 @@ const SalesEntry = () => {
                         ))}
                     </Select>
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={3}>
                     <Select
                         label="Vehicle No"
                         fullWidth
@@ -319,7 +260,7 @@ const SalesEntry = () => {
                         ))}
                     </Select>
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={3}>
                     <Select
                         label="Driver"
                         fullWidth
@@ -334,15 +275,52 @@ const SalesEntry = () => {
                         ))}
                     </Select>
                 </Grid>
-                <Grid  item xs={12} md={2}>
-                <Button variant="contained" color="primary" onClick={handleDialogOpen}>
-                    Sale Details
-                </Button>
-                </Grid>
             </Grid>
 
+            {/* Additional Fields */}
+            <Grid container spacing={2} style={{ marginTop: '20px' }}>
+                <Grid item xs={12} md={3}>
+                    <TextField
+                        label="Total Birds"
+                        type="number"
+                        fullWidth
+                        value={totalBirds}
+                        onChange={(e) => setTotalBirds(e.target.value)}
+                        required
+                    />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                    <TextField
+                        label="Mortality"
+                        type="number"
+                        fullWidth
+                        value={mortality}
+                        onChange={(e) => setMortality(e.target.value)}
+                        required
+                    />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                    <TextField
+                        label="Return to Farm"
+                        type="number"
+                        fullWidth
+                        value={returnToFarm}
+                        onChange={(e) => setReturnToFarm(e.target.value)}
+                        required
+                    />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                    <TextField
+                        label="Description"
+                        type="text"
+                        fullWidth
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                    />
+                </Grid>
+            </Grid>
             
-
+    
             <Typography variant="h5" gutterBottom style={{ marginTop: '20px' }}>Customers</Typography>
             <TableContainer component={Paper}>
                 <Table>
@@ -363,7 +341,7 @@ const SalesEntry = () => {
                     <TableBody>
                         {customers.map((customer, index) => (
                             <TableRow key={customer.id}>
-                                <TableCell>{customer.name}</TableCell>
+                                <TableCell >{customer.name}</TableCell>
                                 <TableCell>
                                     <TextField
                                         type="number"
@@ -424,13 +402,13 @@ const SalesEntry = () => {
                 </Table>
             </TableContainer>
 
-            <Grid container spacing={2} style={{ marginTop: '20px' }}>
-                <Grid item>
-                    <Button variant="contained" color="primary" onClick={handleSubmit}>
+            <Grid container spacing={6} style={{ marginTop: '20px' }}>
+                <Grid item xs={12} md={4}>
+                    <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!isFormValid}>
                         Submit
                     </Button>
                 </Grid>
-                <Grid item>
+                <Grid item xs={12} md={4}>
                     <Button variant="contained" color="secondary" onClick={handleClear}>
                         Clear
                     </Button>
@@ -439,121 +417,17 @@ const SalesEntry = () => {
 
             <Snackbar
                 open={snackbarOpen}
-                autoHideDuration={3000}
+                autoHideDuration={300}
                 onClose={handleCloseSnackbar}
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
             >
-                <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                <Alert
+                    onClose={handleCloseSnackbar}
+                    severity={snackbarSeverity}
+                    sx={{ width: '100%' }}
+                >
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
-
-            {/* Sale Details Dialog */}
-            <Dialog open={dialogOpen} onClose={handleDialogClose}>
-                <DialogTitle>Sale Details</DialogTitle>
-                <DialogContent>
-                    <FormControl fullWidth margin="normal">
-                        <TextField
-                            label="Date"
-                            type="date"
-                            fullWidth
-                            InputLabelProps={{ shrink: true }}
-                            value={dialogData.date}
-                            // onChange={(e) => handleDialogDataChange('date',e.target.value)}
-                            InputProps={{ readOnly: true }}
-                        />
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <Select
-                            label="Route"
-                            fullWidth
-                            value={dialogData.route}
-                          //  onChange={(e) => handleDialogDataChange('route',e.target.value)}
-                          InputProps={{ readOnly: true }}
-                            displayEmpty
-                        >
-                            <MenuItem value=""><em>Select Route</em></MenuItem>
-                            {routes.map(route => (
-                                <MenuItem key={route.id} value={route.id}>{route.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <Select
-                            label="Vehicle"
-                            fullWidth
-                            value={dialogData.vehicle}
-                            InputProps={{ readOnly: true }}
-                           // onChange={(e) => handleDialogDataChange('vehicle',e.target.value)}
-                            displayEmpty
-                        >
-                            <MenuItem value=""><em>Select Vehicle</em></MenuItem>
-                            {vehicles.map(vehicle => (
-                                <MenuItem key={vehicle.id} value={vehicle.id}>{vehicle.vehicleNo}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <Select
-                            label="Driver"
-                            fullWidth
-                            value={dialogData.driver}
-                            InputProps={{ readOnly: true }}
-                            //onChange={(e) => handleDialogDataChange('driver',e.target.value)}
-                            displayEmpty
-                        >
-                            <MenuItem value=""><em>Select Driver</em></MenuItem>
-                            {drivers.map(driver => (
-                                <MenuItem key={driver.id} value={driver.id}>{driver.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <TextField
-                            label="Total Birds"
-                            type="number"
-                            fullWidth
-                            value={dialogData.totalBirds}
-                            onChange={(e) => handleDialogDataChange('totalBirds', e.target.value)}
-                        />
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <TextField
-                            label="Mortality"
-                            type="number"
-                            fullWidth
-                            value={dialogData.mortality}
-                            onChange={(e) => handleDialogDataChange('mortality', e.target.value)}
-                        />
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <TextField
-                            label="Return to Farm"
-                            type="number"
-                            fullWidth
-                            value={dialogData.returnToFarm}
-                            onChange={(e) => handleDialogDataChange('returnToFarm', e.target.value)}
-                        />
-                    </FormControl>
-                    <FormControl fullWidth margin="normal">
-                        <TextField
-                            label="Description"
-			                type="text"
-                            fullWidth
-                            value={dialogData.description}
-                            onChange={(e) => handleDialogDataChange('description', e.target.value)}
-                        />
-                    </FormControl>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleDialogClose} color="secondary">
-                        Cancel
-                    </Button>
-                    <Button onClick={handleDialogSubmit} color="primary">
-                        Save
-                    </Button>
-                </DialogActions>
-            </Dialog>
         </Container>
     );
 };

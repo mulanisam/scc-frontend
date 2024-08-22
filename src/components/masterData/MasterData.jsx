@@ -322,12 +322,14 @@ const MasterData = () => {
                                             <TableCell key={index}>{value}</TableCell>
                                         ))}
                                         <TableCell>
-                                            <IconButton onClick={() => handleOpenForm(dataType, row)}>
+                                        <Grid item xs={12} sm={2} style={{ display: 'flex', alignItems: 'center' }}>
+                                            <IconButton  color="secondary" onClick={() => handleOpenForm(dataType, row)} style={{ marginRight: '8px', width: '40px', height: '40px' }}>
                                                 <Edit />
                                             </IconButton>
-                                            <IconButton onClick={() => handleDelete(row.id)}>
+                                            <IconButton color="error" onClick={() => handleDelete(row.id)} style={{ marginRight: '8px', width: '40px', height: '40px' }}>
                                                 <Delete />
                                             </IconButton>
+                                            </Grid>
                                         </TableCell>
                                     </TableRow>
                                 ))}

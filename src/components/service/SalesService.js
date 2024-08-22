@@ -37,7 +37,7 @@ const createSalesEntry = (salesEntry) => {
   });
 };
 
-const saveDialogData = (salesDetails) => {
+const saveSaleDetailsData = (salesDetails) => {
   return axios.post(`${API_BASE_URL}/user/sales/saveDetails`, salesDetails, {
     headers: {
       'Content-Type': 'application/json',
@@ -57,6 +57,5 @@ export {
   getCustomersByRoute,
   createSalesEntry,
   getVehicles,
-  saveDialogData,
   getSaleDetailsByCriteria
 };
