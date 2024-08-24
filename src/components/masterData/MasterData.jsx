@@ -255,6 +255,7 @@ const MasterData = () => {
 
     return (
         <Container style={{ height: 'auto', overflow: 'auto' }}>
+            <Paper elevation={3} style={{ padding: '16px', marginBottom: '16px' }}>
             <Typography variant="h4" gutterBottom>Master Data Management</Typography>
             <Grid container spacing={2}>
                 {dataTypes.map(type => (
@@ -268,8 +269,10 @@ const MasterData = () => {
                     </Grid>
                 )}
             </Grid>
+            </Paper>
             {dataType && (
                 <>
+                  <Paper elevation={3} style={{ padding: '16px', marginTop: '16px' }}>
                     <Typography variant="h5" gutterBottom style={{ marginTop: '20px' }}>{dataType.charAt(0).toUpperCase() + dataType.slice(1)}</Typography>
                     <Grid container spacing={2} alignItems="center">
                 <Grid item>
@@ -336,6 +339,7 @@ const MasterData = () => {
                             </TableBody>
                         </Table>
                     </TableContainer>
+                    </Paper>
                 </>
             )}
            <Dialog open={openForm} onClose={handleCloseForm}>

@@ -70,6 +70,7 @@ const SalesEntry = () => {
                     const response = await getCustomersByRoute(selectedRoute);
                     const initialSalesData = response.data.map(customer => ({
                         customerId: customer.id,
+                        city:customer.city.name,
                         birds: 0,
                         kilograms: '',
                         rate: '',
@@ -79,9 +80,12 @@ const SalesEntry = () => {
                         pending: 0,
                         balanceAmount: customer.balanceAmount || 0.0,
                         description: '',
+                        obsolete:customer.obsolete
                     }));
-                    setCustomers(response.data);
-                    setSalesData(initialSalesData);
+                    const filteredInitialSalesData = initialSalesData.filter(customer => !customer.obsolete);
+                    const filteredCustomersData = response.data.filter(customer => !customer.obsolete);
+                    setCustomers(filteredCustomersData);
+                    setSalesData(filteredInitialSalesData);
                 } catch (error) {
                     console.error('Error fetching customers:', error);
                 }
@@ -113,6 +117,9 @@ const SalesEntry = () => {
         fetchSaleDetails();
     }, [date, selectedRoute, selectedVehicle, selectedDriver, isFormValid]);
 
+    const roundToNearestTen = (amount) => {
+        return Math.round(amount / 10) * 10;
+      };
     const handleSalesDataChange = useCallback((index, field, value) => {
         setSalesData(prevSalesData => {
             const newData = [...prevSalesData];
@@ -121,9 +128,9 @@ const SalesEntry = () => {
                 [field]: value,
             };
             if (field === 'rate' || field === 'kilograms') {
-                newData[index].amount = newData[index].rate * newData[index].kilograms;
+                newData[index].amount = roundToNearestTen(newData[index].rate * newData[index].kilograms);
             }
-            newData[index].pending = newData[index].amount - newData[index].payment;
+            newData[index].pending = roundToNearestTen(newData[index].amount - newData[index].payment);
             return newData;
         });
     }, []);
@@ -327,6 +334,7 @@ const SalesEntry = () => {
                     <TableHead>
                         <TableRow>
                             <TableCell>Customer</TableCell>
+                            <TableCell>City</TableCell>
                             <TableCell>Birds</TableCell>
                             <TableCell>Kilograms</TableCell>
                             <TableCell>Rate</TableCell>
@@ -342,6 +350,7 @@ const SalesEntry = () => {
                         {customers.map((customer, index) => (
                             <TableRow key={customer.id}>
                                 <TableCell >{customer.name}</TableCell>
+                                <TableCell >{customer.city.name}</TableCell>
                                 <TableCell>
                                     <TextField
                                         type="number"

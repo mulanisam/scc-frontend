@@ -90,42 +90,106 @@ const ReportPage = () => {
 
   const handleDownloadPdf = () => {
     const doc = new jsPDF({
-      orientation: 'landscape', // Use landscape orientation for horizontal layout
-      unit: 'mm', // Units in millimeters
-      format: 'a4' // Page size A4
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4',
     });
-    const tableHeaders = getTableHeaders();
-    const tableData = reportData.map(row => tableHeaders.map(header => sanitizeText(row[header])));
+  
+    const companyName = "SOHEL CHICKEN CENTRE"; 
+    const companyAddress = "Madha, Solapur, Maharashtra-413209"; 
+    const contactNumber = "Contact: +91 8605030099"; 
+    const reportName = `${reportType} ${subType} Report`; 
+    const dateRange = `Statement Date Range: ${startDate} - ${endDate}`; 
+    const generationDate = `Report Generated on: ${new Date().toLocaleDateString()}`;
 
-    autoTable(doc, {
-      head: [tableHeaders],
-      body: tableData,
-      theme: 'striped',
-      styles: {
-        cellPadding: 2,
-        fontSize: 8, // Adjust font size if necessary
-        textColor: [0, 0, 0],
-        valign: 'middle',
-        halign: 'center',
-        overflow: 'linebreak', // Allow text to wrap within cells
-      },
-      headStyles: {
-        cellPadding: 2,
-        fontSize: 8,
-        textColor: [0, 0, 0],
-        valign: 'middle',
-        halign: 'center',
-        overflow: 'linebreak', // Allow header text to wrap
-      },
-      margin: { top: 10, bottom: 10, left: 10, right: 10 },
-      tableWidth: 'auto', // Set margins to avoid text getting cut off
-    });
+    if (reportData.length > 0) {
+       
+        const { ROUTE, VEHICLE, DRIVER } = reportData[0];
+        const routeText = ROUTE || 'N/A';
+        const vehicleText = VEHICLE || 'N/A';
+        const driverText = DRIVER || 'N/A';
 
-    doc.save('report.pdf');
-  };
+        // Calculate the right side position based on page width
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const rightX = pageWidth - 10; // Margin of 10mm
+
+        // Add the header with the report details on the left and company details on the right
+        doc.setFontSize(14);
+        doc.text(reportName, 10, 10);
+        doc.setFontSize(10);
+        doc.text(dateRange, 10, 15);
+        doc.text(generationDate, 10, 20);
+
+        // Display Route, Vehicle, and Driver information in one line
+        doc.setFontSize(10);
+        doc.text(`Route: ${routeText}    Vehicle: ${vehicleText}    Driver: ${driverText}`, 10, 25);
+      
+        doc.setFontSize(14);
+        doc.text(companyName, rightX, 10, { align: 'right' });
+        doc.setFontSize(10);
+        doc.text(companyAddress, rightX, 15, { align: 'right' });
+        doc.text(contactNumber, rightX, 20, { align: 'right' });
+      
+        // Filter out the first three columns (Route, Vehicle, Driver) from the table headers and data
+        const tableHeaders = getTableHeaders().filter(header => !['ROUTE', 'VEHICLE', 'DRIVER', 'RATE'].includes(header));        
+        const tableData = reportData.map((row) =>
+          tableHeaders.map((header) => sanitizeText(row[header]))
+        );
+
+        autoTable(doc, {
+          head: [tableHeaders],
+          body: tableData,
+          theme: 'striped',
+          styles: {
+            cellPadding: 2,
+            fontSize: 8,
+            textColor: [0, 0, 0],
+            valign: 'middle',
+            halign: 'center',
+            overflow: 'linebreak',
+          },
+          headStyles: {
+            cellPadding: 2,
+            fontSize: 8,
+            textColor: [0, 0, 0],
+            valign: 'middle',
+            halign: 'center',
+            overflow: 'linebreak',
+          },
+          margin: { top: 30, bottom: 10, left: 10, right: 10 }, // Adjust top margin to fit header
+          didDrawPage: (data) => {
+            // Re-draw the header on each page
+            doc.setFontSize(14);
+            doc.text(reportName, data.settings.margin.left, 10);
+            doc.setFontSize(10);
+            doc.text(dateRange, data.settings.margin.left, 15);
+            doc.text(generationDate, data.settings.margin.left, 20);
+
+            // Re-draw Route, Vehicle, Driver information in one line on each page
+            doc.setFontSize(10);
+            doc.text(`Route: ${routeText}    Vehicle: ${vehicleText}    Driver: ${driverText}`, data.settings.margin.left, 25);
+        
+            doc.setFontSize(14);
+            doc.text(companyName, rightX, 10, { align: 'right' });
+            doc.setFontSize(10);
+            doc.text(companyAddress, rightX, 15, { align: 'right' });
+            doc.text(contactNumber, rightX, 20, { align: 'right' });
+          },
+          tableWidth: 'auto',
+        });
+      
+        doc.save(`${reportName.replace(/ /g, '_')}.pdf`);
+    } else {
+        console.error("reportData is empty");
+    }
+};
 
   const handleDownloadExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(reportData);
+    const tableHeaders = getTableHeaders().filter(header => !['ROUTE', 'VEHICLE', 'DRIVER', 'RATE'].includes(header));        
+        const tableData = reportData.map((row) =>
+          tableHeaders.map((header) => sanitizeText(row[header]))
+        );
+    const ws = XLSX.utils.json_to_sheet(tableData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
     XLSX.writeFile(wb, 'report.xlsx');
