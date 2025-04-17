@@ -132,13 +132,21 @@ const ReportPage = () => {
       
         // Filter out the first three columns (Route, Vehicle, Driver) from the table headers and data
         const tableHeaders = getTableHeaders().filter(header => !['ROUTE', 'VEHICLE', 'DRIVER', 'RATE'].includes(header));        
-        const tableData = reportData.map((row) =>
-          tableHeaders.map((header) => sanitizeText(row[header]))
-        );
-
+        // const tableData = reportData.map((row) =>
+        //   tableHeaders.map((header) => sanitizeText(row[header]))
+        // );
+        const tableDataWithTotals = [
+          ...reportData.map(row =>
+            tableHeaders.map(header => sanitizeText(row[header]))
+          ),
+          // Totals row
+          getTableHeaders().filter(header => !['ROUTE', 'VEHICLE', 'DRIVER', 'RATE'].includes(header)).map(header =>
+            header === 'TOTAL' ? 'Totals' : typeof reportData[0][header] === 'number' ? calculateTotals()[header] : ''
+          ),
+        ];
         autoTable(doc, {
           head: [tableHeaders],
-          body: tableData,
+          body: tableDataWithTotals,
           theme: 'striped',
           styles: {
             cellPadding: 2,
@@ -201,7 +209,35 @@ const ReportPage = () => {
     const firstRow = reportData[0];
     return Object.keys(firstRow);
   };
-
+  // const calculateTotals = () => {
+  //   const totals = {};
+  //   reportData.forEach(row => {
+  //     getTableHeaders().forEach(header => {
+  //       if (typeof row[header] === 'number') {
+  //         totals[header] = (totals[header] || 0) + row[header];
+  //       }
+  //     });
+  //   });
+  //   return totals;
+  // };
+  const calculateTotals = () => {
+    const totals = {};
+    reportData.forEach(row => {
+      getTableHeaders().forEach(header => {
+        console.log("Header",header);
+        if (
+          header !== 'BALANCE PENDING' && 
+          typeof row[header] === 'number' && 
+          !isNaN(row[header])
+        ) {
+          totals[header] = (totals[header] || 0) + row[header];
+        }
+      });
+    });
+    return totals;
+  };
+  
+  
   // Define subtype options based on reportType
   const reportTypeOptions = {
     sale: [
@@ -326,6 +362,13 @@ const ReportPage = () => {
                     ))}
                   </TableRow>
                 ))}
+                 <TableRow>
+                    {getTableHeaders().map(header => (
+                      <TableCell key={header} align={typeof reportData[0][header] === 'number' ? 'right' : 'left'}>
+                        {header === 'TOTAL' ? 'Totals' : typeof reportData[0][header] === 'number' ? calculateTotals()[header] : ''}
+                      </TableCell>
+                    ))}
+                  </TableRow>
               </TableBody>
             </Table>
           </TableContainer>

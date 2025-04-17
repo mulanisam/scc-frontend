@@ -15,18 +15,13 @@ import '../css/Dashboard.css'; // Ensure this path is correct
 const Dashboard = () => {
     const [dateTime, setDateTime] = useState(format(new Date(), 'dd MMM yyyy HH:mm:ss'));
     const [metrics, setMetrics] = useState({
-        todaysSales: 0,
-        pendingAmount: 0,
-        balanceRecovery: 0,
-        totalBalance: 0,
-        maxPending: 0,
-        monthlySale: 0,
-        dieselDaily: 0,
-        dieselMonthly: 0,
-        driverExpenses: 0,
-        monthlyDriverExpenses: 0,
-        farmBirds: 0,
-        saleFromFarm: 0,
+        todaysSaleAmount: 0,
+        todaysPayment: 0,
+        todaysPending: 0,
+        todaysBirdsSale: 0,
+        todaysSaleWeight: 0,
+        todaysMortality: 0,
+        returnToFarmBirds: 0,
     });
 
     useEffect(() => {
