@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-no-undef */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Container,
@@ -15,11 +16,14 @@ import {
     Paper,
     Typography,
     Snackbar,
-    Alert
+    Alert,
+    SliderMark
 } from '@mui/material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getSaleDetailsByCriteria } from '../service/SalesService';
 import UserService from '../service/UserService';
 import { Navigate } from 'react-router-dom';
+import { FormControlLabel, Checkbox } from '@mui/material';
+
 
 const SalesEntry = () => {
     const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -38,6 +42,9 @@ const SalesEntry = () => {
     const [mortality, setMortality] = useState('');
     const [returnToFarm, setReturnToFarm] = useState('');
     const [description, setDescription] = useState('');
+    const [sendSms, setSendSms] = useState(true);
+
+
 
     const isFormValid = selectedRoute && selectedDriver && selectedVehicle && date;
     useEffect(() => {
@@ -165,7 +172,8 @@ const SalesEntry = () => {
             totalKilogramSale: totals.kilograms,
             totalAmount: totals.amount,
             totalPaymentReceived: totals.payment,
-            totalPending: totals.pending
+            totalPending: totals.pending,
+            sendSms:sendSms
         };
         
 
@@ -224,131 +232,137 @@ const SalesEntry = () => {
     };
 
     return (
-        <Container>
-             <Typography variant="h4" gutterBottom>Sales Entry</Typography>
-            <Grid container spacing={6}>
-                <Grid item xs={12} md={3}>
-                    <TextField
-                        label="Date"
-                        type="date"
-                        fullWidth
-                        InputLabelProps={{ shrink: true }}
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                    />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <Select
-                        label="Route"
-                        fullWidth
-                        value={selectedRoute}
-                        onChange={(e) => setSelectedRoute(e.target.value)}
-                        displayEmpty
-                        required
-                    >
-                        <MenuItem value=""><em>Select Route</em></MenuItem>
-                        {routes.map(route => (
-                            <MenuItem key={route.id} value={route.id}>{route.name}</MenuItem>
-                        ))}
-                    </Select>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <Select
-                        label="Vehicle No"
-                        fullWidth
-                        value={selectedVehicle}
-                        onChange={(e) => setSelectedVehicle(e.target.value)}
-                        displayEmpty
-                        required
-                    >
-                        <MenuItem value=""><em>Select Vehicle</em></MenuItem>
-                        {vehicles.map(vehicle => (
-                            <MenuItem key={vehicle.id} value={vehicle.id}>{vehicle.vehicleNo}</MenuItem>
-                        ))}
-                    </Select>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <Select
-                        label="Driver"
-                        fullWidth
-                        value={selectedDriver}
-                        onChange={(e) => setSelectedDriver(e.target.value)}
-                        displayEmpty
-                        required
-                    >
-                        <MenuItem value=""><em>Select Driver</em></MenuItem>
-                        {drivers.map(driver => (
-                            <MenuItem key={driver.id} value={driver.id}>{driver.name}</MenuItem>
-                        ))}
-                    </Select>
-                </Grid>
-            </Grid>
+        <Container maxWidth={false}>
+            <Paper elevation={3} style={{ padding: '16px', marginBottom: '16px' , width: '100%'}}>
+             {/* <Typography variant="h4" gutterBottom>Sales Entry</Typography> */}
+             <Grid container spacing={1}>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <TextField
+      label="Date"
+      type="date"
+      fullWidth
+      InputLabelProps={{ shrink: true }}
+      value={date}
+      onChange={(e) => setDate(e.target.value)}
+      InputProps={{ sx: { height: 40 } }}
+    />
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <Select
+      fullWidth
+      value={selectedRoute}
+      onChange={(e) => setSelectedRoute(e.target.value)}
+      displayEmpty
+      required
+      sx={{ height: 40 }}
+      MenuProps={{ PaperProps: { sx: { maxHeight: 200 } } }}
+    >
+      <MenuItem value=""><em>Select Route</em></MenuItem>
+      {routes.map(route => (
+        <MenuItem key={route.id} value={route.id}>{route.name}</MenuItem>
+      ))}
+    </Select>
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <Select
+      fullWidth
+      value={selectedVehicle}
+      onChange={(e) => setSelectedVehicle(e.target.value)}
+      displayEmpty
+      required
+      sx={{ height: 40 }}
+    >
+      <MenuItem value=""><em>Select Vehicle</em></MenuItem>
+      {vehicles.map(vehicle => (
+        <MenuItem key={vehicle.id} value={vehicle.id}>{vehicle.vehicleNo}</MenuItem>
+      ))}
+    </Select>
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <Select
+      fullWidth
+      value={selectedDriver}
+      onChange={(e) => setSelectedDriver(e.target.value)}
+      displayEmpty
+      required
+      sx={{ height: 40 }}
+    >
+      <MenuItem value=""><em>Select Driver</em></MenuItem>
+      {drivers.map(driver => (
+        <MenuItem key={driver.id} value={driver.id}>{driver.name}</MenuItem>
+      ))}
+    </Select>
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <TextField
+      label="Total Birds"
+      type="number"
+      fullWidth
+      value={totalBirds}
+      onChange={(e) => setTotalBirds(e.target.value)}
+      required
+      InputProps={{ sx: { height: 40 } }}
+    />
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <TextField
+      label="Mortality"
+      type="number"
+      fullWidth
+      value={mortality}
+      onChange={(e) => setMortality(e.target.value)}
+      required
+      InputProps={{ sx: { height: 40 } }}
+    />
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <TextField
+      label="Return to Farm"
+      type="number"
+      fullWidth
+      value={returnToFarm}
+      onChange={(e) => setReturnToFarm(e.target.value)}
+      required
+      InputProps={{ sx: { height: 40 } }}
+    />
+  </Grid>
+  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
+    <TextField
+      label="Description"
+      type="text"
+      fullWidth
+      value={description}
+      onChange={(e) => setDescription(e.target.value)}
+      InputProps={{ sx: { height: 42 } }}
+    />
+  </Grid>
+</Grid>
 
-            {/* Additional Fields */}
-            <Grid container spacing={2} style={{ marginTop: '20px' }}>
-                <Grid item xs={12} md={3}>
-                    <TextField
-                        label="Total Birds"
-                        type="number"
-                        fullWidth
-                        value={totalBirds}
-                        onChange={(e) => setTotalBirds(e.target.value)}
-                        required
-                    />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <TextField
-                        label="Mortality"
-                        type="number"
-                        fullWidth
-                        value={mortality}
-                        onChange={(e) => setMortality(e.target.value)}
-                        required
-                    />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <TextField
-                        label="Return to Farm"
-                        type="number"
-                        fullWidth
-                        value={returnToFarm}
-                        onChange={(e) => setReturnToFarm(e.target.value)}
-                        required
-                    />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <TextField
-                        label="Description"
-                        type="text"
-                        fullWidth
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                    />
-                </Grid>
-            </Grid>
-            
-    
-            <Typography variant="h5" gutterBottom style={{ marginTop: '20px' }}>Customers</Typography>
-            <TableContainer component={Paper}>
-                <Table>
+  
+
+        </Paper>
+    <Paper elevation={3} style={{ padding: '16px', marginTop: '16px' , width: '100%'}}>
+            {/* <Typography variant="h5" gutterBottom style={{ marginTop: '5px' }}>Customers</Typography> */}
+            <TableContainer component={Paper} style={{ width: '100%', maxHeight: '60vh' }}>
+                <Table stickyHeader style={{ tableLayout: 'fixed', width: '100%' }}  sx={{ '& td, & th': { py: 0.5, px: 1 } }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell>Customer</TableCell>
-                            <TableCell>City</TableCell>
-                            <TableCell>Birds</TableCell>
-                            <TableCell>Kilograms</TableCell>
-                            <TableCell>Rate</TableCell>
-                            <TableCell>Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>City</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Birds</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Kilograms</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Rate</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Amount</TableCell>
                             {/* <TableCell>Payment Mode</TableCell> */}
-                            <TableCell>Payment</TableCell>
-                            <TableCell>Pending</TableCell>
-                            <TableCell>Balance Amount</TableCell>
-                            <TableCell>Description</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Payment</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Pending</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Balance Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {customers.map((customer, index) => (
-                            <TableRow key={customer.id}>
+                            <TableRow key={customer.id} >
                                 <TableCell >{customer.name}</TableCell>
                                 <TableCell >{customer.city.name}</TableCell>
                                 <TableCell>
@@ -396,8 +410,14 @@ const SalesEntry = () => {
                                 </TableCell>
                             </TableRow>
                         ))}
-                         <TableRow>
+                         <TableRow sx={{
+                                        position: "sticky",
+                                        bottom: 0,
+                                        background: "#fff",
+                                        zIndex: 2
+                                    }}>
                 <TableCell><strong>Total</strong></TableCell>
+                <TableCell></TableCell>
                 <TableCell><strong>{calculateTotals().birds}</strong></TableCell>
                 <TableCell><strong>{calculateTotals().kilograms}</strong></TableCell>
                 <TableCell></TableCell> {/* Optional: If you need a total for rate */}
@@ -410,19 +430,59 @@ const SalesEntry = () => {
                     </TableBody>
                 </Table>
             </TableContainer>
+            <Grid container spacing={2} style={{ marginTop: '20px', width: 'auto' }}>
+            <Grid item>
+                <Button
+                variant="contained"
+                color="primary"
+                onClick={handleSubmit}
+                disabled={!isFormValid}
+                size="small"
+                >
+                Submit
+                </Button>
+            </Grid>
+            <Grid item>
+                <Button
+                variant="contained"
+                color="secondary"
+                onClick={handleClear}
+                size="small"
+                >
+                Clear
+                </Button>
+            </Grid>
+            <Grid item>
+              
+                <FormControlLabel
+                    control={
+                    <Checkbox
+                        checked={sendSms}
+                        onChange={(e) => setSendSms(e.target.checked)}
+                        color="success"
+                    />
+                    }
+                    label="Send SMS"
+                    size="small"
+                />
+            </Grid>
 
-            <Grid container spacing={6} style={{ marginTop: '20px' }}>
-                <Grid item xs={12} md={4}>
+            </Grid>
+
+            </Paper>
+            
+            {/* <Grid container spacing={6} style={{ marginTop: '20px' }}>
+                <Grid container spacing={2}>
                     <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!isFormValid}>
                         Submit
                     </Button>
                 </Grid>
-                <Grid item xs={12} md={4}>
+               <Grid container spacing={2}>
                     <Button variant="contained" color="secondary" onClick={handleClear}>
                         Clear
                     </Button>
                 </Grid>
-            </Grid>
+            </Grid> */}
 
             <Snackbar
                 open={snackbarOpen}
@@ -437,6 +497,7 @@ const SalesEntry = () => {
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
+           
         </Container>
     );
 };

@@ -255,9 +255,9 @@ const ReportPage = () => {
   };
 
   return (
-    <Container>
-      <Paper elevation={3} style={{ padding: '16px', marginBottom: '16px' }}>
-        <Typography variant="h6">Search Reports</Typography>
+    <Container maxWidth={false}>
+      <Paper elevation={3} style={{ padding: '16px', marginBottom: '16px' , width: '100%'}}>
+        {/* <Typography variant="h6">Search Reports</Typography> */}
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={2}>
             <TextField
@@ -339,14 +339,14 @@ const ReportPage = () => {
       </Paper>
 
       {showReport && (
-        <Paper elevation={3} style={{ padding: '16px', marginTop: '16px' }}>
+        <Paper elevation={3} style={{ padding: '16px', marginTop: '16px' , width: '100%'}}>
           <Typography variant="h6">Report Results</Typography>
-          <TableContainer>
-            <Table>
+          <TableContainer style={{ width: '100%', maxHeight: '60vh' }}>
+            <Table stickyHeader style={{ tableLayout: 'fixed', width: '100%' }}>
               <TableHead>
                 <TableRow>
                   {getTableHeaders().map(header => (
-                    <TableCell key={header}>
+                    <TableCell key={header} style={{ wordBreak: 'break-word', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <TableSortLabel>{header}</TableSortLabel>
                     </TableCell>
                   ))}
@@ -356,7 +356,7 @@ const ReportPage = () => {
                 {reportData.map((row, index) => (
                   <TableRow key={index}>
                     {getTableHeaders().map(header => (
-                      <TableCell key={header}>
+                      <TableCell key={header} style={{ wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {row[header]}
                       </TableCell>
                     ))}
