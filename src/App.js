@@ -12,7 +12,6 @@ import SalesEntry from './components/sale/SalesEntry';
 import PurchaseEntryPage from './components/purchase/PurchaseEntry';
 import MasterData from './components/masterData/MasterData';
 import Dashboard from './components/common/Dashboard';
-import TradingPage from './components/trading/TradingPage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -52,8 +51,7 @@ function App() {
                 <Route path="/master-data" element={<MasterData />} />
                 {isAdmin && (
                   <>
-                    <Route path="/trading" element={<TradingPage />} />
-                     <Route path="/register" element={<RegistrationPage />} />
+                    <Route path="/register" element={<RegistrationPage />} />
                     <Route path="/admin/user-management" element={<UserManagementPage />} />
                     <Route path="/update-user/:userId" element={<UpdateUser />} />
                   </>

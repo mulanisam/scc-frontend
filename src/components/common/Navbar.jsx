@@ -5,24 +5,6 @@ import UserService from '../service/UserService';
 function Navbar() {
     
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    const checkAuth = () => {
-      setIsAuthenticated(UserService.isAuthenticated());
-      setIsAdmin(UserService.adminOnly());
-    };
-
-    checkAuth();
-
-    // Add an event listener to update the authentication status on storage change
-    window.addEventListener('storage', checkAuth);
-
-    // Cleanup the event listener on component unmount
-    return () => {
-      window.removeEventListener('storage', checkAuth);
-    };
-  }, []);
     //const isAdmin = UserService.isAdmin();
     useEffect(() => {
         const handleStorageChange = () => {
@@ -51,7 +33,6 @@ function Navbar() {
                 {isAuthenticated && <li><Link to="/dashboard">Dashboard</Link></li>}
                 {isAuthenticated && <li><Link to="/sale">Sale</Link></li>}
                 {isAuthenticated && <li><Link to="/purchase">Purchase</Link></li>}
-                {isAdmin && isAuthenticated && <li><Link to="/trading">Trading</Link></li>}
                 {isAuthenticated && <li><Link to="/master-data">Masters</Link></li>}
                 {isAuthenticated && <li><Link to="/reports">Reports</Link></li>}
                 {/* {isAdmin && <li><Link to="/admin/user-management">User Management</Link></li>} */}
