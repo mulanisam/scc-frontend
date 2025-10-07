@@ -1,17 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Typography, TextField, Grid, Button, MenuItem, IconButton,Snackbar,Alert, Dialog,DialogTitle, DialogContent, DialogContentText} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase, fetchPurchaseDetails,submitPayment} from '../service/PurchaseService';
+import {
+  Container,
+  Typography,
+  TextField,
+  Grid,
+  Button,
+  MenuItem,
+  IconButton,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Paper,
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Card,
+  CardContent,
+  CardHeader,
+  InputAdornment,
+  CircularProgress
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Save as SaveIcon,
+  Clear as ClearIcon,
+  Payment as PaymentIcon,
+  AttachFile as AttachFileIcon,
+  Calculate as CalculateIcon,
+  LocalShipping as VehicleIcon,
+  Person as DriverIcon,
+  Business as SupplierIcon,
+  LocationOn as BranchIcon,
+  Agriculture as FarmIcon,
+  SupervisorAccount as SupervisorIcon,
+  Phone as PhoneIcon,
+  LocalGasStation as DieselIcon,
+  Build as HamaliIcon,
+  MonetizationOn as ExpenseIcon
+} from '@mui/icons-material';
+import { fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase, fetchPurchaseDetails, submitPayment } from '../service/PurchaseService';
 
 const PurchaseEntryPage = () => {
   const [tableRows, setTableRows] = useState([{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10)); 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  
   const [formData, setFormData] = useState({
-    entryDate: date,
+    entryDate: new Date().toISOString().slice(0, 10),
     vehicle: '',
     driver: '',
     supplier: '',
@@ -22,14 +67,14 @@ const PurchaseEntryPage = () => {
     driverExpense: '',
     diesel: '',
     hamali: '',
-    notes: '',
     dcDetails: tableRows
   });
+  
   const [suppliers, setSuppliers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [files, setFiles] = useState([]);
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentData, setPaymentData] = useState({
     dateOfPurchase: '',
@@ -41,6 +86,7 @@ const PurchaseEntryPage = () => {
     comment: '',
     supplier: ''
   });
+
   const clearPaymentData = () => {
     setPaymentData({
       dateOfPurchase: '',
@@ -53,18 +99,23 @@ const PurchaseEntryPage = () => {
       supplier: ''
     });
   };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [suppliersData, vehiclesData, driversData] = await Promise.all([fetchSuppliers(), fetchVehicles(), fetchDrivers()]);
+        const [suppliersData, vehiclesData, driversData] = await Promise.all([
+          fetchSuppliers(), 
+          fetchVehicles(), 
+          fetchDrivers()
+        ]);
         setSuppliers(suppliersData);
         setVehicles(vehiclesData);
         setDrivers(driversData);
       } catch (error) {
         console.error('Error fetching data:', error);
-        setSnackbarMessage('Error fetching data:', error);
+        setSnackbarMessage('Error fetching data: ' + error.message);
         setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+        setSnackbarOpen(true);
       }
     };
     fetchData();
@@ -78,8 +129,9 @@ const PurchaseEntryPage = () => {
   const deleteRow = (index) => {
     if (tableRows.length === 1) return;
     const updatedRows = [...tableRows.slice(0, index), ...tableRows.slice(index + 1)];
-    setTableRows(updatedRows.map((row, idx) => ({ ...row, srNo: idx + 1 })));
-    setFormData({ ...formData, dcDetails: updatedRows });
+    const reindexedRows = updatedRows.map((row, idx) => ({ ...row, srNo: idx + 1 }));
+    setTableRows(reindexedRows);
+    setFormData({ ...formData, dcDetails: reindexedRows });
   };
 
   const handleTableChange = (index, field, value) => {
@@ -96,11 +148,13 @@ const PurchaseEntryPage = () => {
 
   const calculateTotalAmount = () => {
     const total = parseFloat(formData.driverExpense || 0) + parseFloat(formData.diesel || 0) + parseFloat(formData.hamali || 0);
-    return isNaN(total) ? '' : total.toFixed(2);
+    return isNaN(total) ? 0 : total;
   };
+
   const calculateTotal = (field) => {
-    return tableRows.reduce((total, row) => total + (parseFloat(row[field]) || 0), 0).toFixed(2);
+    return tableRows.reduce((total, row) => total + (parseFloat(row[field]) || 0), 0);
   };
+
   const handleFileChange = (event) => {
     const selectedFile = event.target.files[0];
     const MAX_FILE_SIZE_MB = 5;
@@ -122,17 +176,23 @@ const PurchaseEntryPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     if (!formData.entryDate || !formData.vehicle || !formData.supplier || !formData.driver) {
-      setSnackbarMessage('Date, Vehicle No, and Supplier are mandatory fields.');
+      setSnackbarMessage('Date, Vehicle, Driver, and Supplier are mandatory fields.');
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
+      setIsSubmitting(false);
       return;
     }
 
     if (tableRows.some(row => !row.nos || !row.kilograms)) {
-      setSnackbarMessage('Nos and Kilograms are mandatory in entry details.');
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
+      setSnackbarMessage('Quantity and Weight are mandatory in DC details.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      setIsSubmitting(false);
       return;
     }
 
@@ -148,40 +208,34 @@ const PurchaseEntryPage = () => {
       driverExpense: formData.driverExpense,
       diesel: formData.diesel,
       hamali: formData.hamali,
-      notes: formData.notes,
       dcDetails: formData.dcDetails
     };
 
     const data = new FormData();
     data.append('purchaseEntry', JSON.stringify(purchaseEntry));
-    files.forEach((file, index) => {
+    files.forEach((file) => {
       data.append(`files`, file);
     });
-    
 
     try {
-      
-       submitPurchase(data).then
-       (response => {
-                setSnackbarMessage('Purchase Entry created successfully');
-                setSnackbarSeverity('success');
-                setSnackbarOpen(true);
-                window.location.reload();
-              }).catch(error => {
-                setSnackbarMessage('Error creating Purchase Entry');
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-          });
+      await submitPurchase(data);
+      setSnackbarMessage('Purchase Entry created successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      handleClear();
     } catch (error) {
-                setSnackbarMessage('Error creating Purchase Entry');
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
+      console.error('Error creating purchase entry:', error);
+      setSnackbarMessage('Error creating Purchase Entry: ' + (error.message || 'Unknown error'));
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleClear = () => {
     setFormData({
-      entryDate: date,
+      entryDate: new Date().toISOString().slice(0, 10),
       vehicle: '',
       driver: '',
       supplier: '',
@@ -192,413 +246,767 @@ const PurchaseEntryPage = () => {
       driverExpense: '',
       diesel: '',
       hamali: '',
-      notes: '',
-      dcDetails: []
+      dcDetails: [{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]
     });
     setTableRows([{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]);
     setFiles([]);
   };
 
   const handleCloseSnackbar = (event, reason) => {
-    if (reason === 'clickaway') {
-        return;
-    }
+    if (reason === 'clickaway') return;
     setSnackbarOpen(false);
-};
+  };
 
-const handleOpenPaymentDialog = () => {
-  setPaymentDialogOpen(true);
-};
+  const handleOpenPaymentDialog = () => {
+    setPaymentDialogOpen(true);
+  };
 
-const handleClosePaymentDialog = () => {
-  clearPaymentData();
-  setPaymentDialogOpen(false);
-};
+  const handleClosePaymentDialog = () => {
+    clearPaymentData();
+    setPaymentDialogOpen(false);
+  };
 
-const handlePaymentChange = async (event) => {
-  const { name, value } = event.target;
-  const newPaymentData = { ...paymentData, [name]: value };
+  const handlePaymentChange = async (event) => {
+    const { name, value } = event.target;
+    const newPaymentData = { ...paymentData, [name]: value };
 
-  if ((name === 'supplier' && newPaymentData.dateOfPurchase) || (name === 'dateOfPurchase' && newPaymentData.supplier)) {
+    if ((name === 'supplier' && newPaymentData.dateOfPurchase) || (name === 'dateOfPurchase' && newPaymentData.supplier)) {
+      try {
+        const purchaseDetails = await fetchPurchaseDetails(newPaymentData.supplier, newPaymentData.dateOfPurchase);
+        newPaymentData.totalAmount = purchaseDetails.totalAmount || 0;
+        newPaymentData.paidAmount = purchaseDetails.paidAmount || 0;
+        newPaymentData.pendingPayment = (parseFloat(newPaymentData.totalAmount) - parseFloat(newPaymentData.paidAmount)).toFixed(2);
+      } catch (error) {
+        setSnackbarMessage('Error fetching purchase details.');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      }
+    } else {
+      if (name === 'totalAmount' || name === 'paidAmount') {
+        const totalAmount = parseFloat(newPaymentData.totalAmount) || 0;
+        const paidAmount = parseFloat(newPaymentData.paidAmount) || 0;
+        newPaymentData.pendingPayment = (totalAmount - paidAmount).toFixed(2);
+      }
+    }
+    setPaymentData(newPaymentData);
+  };
+
+  const handlePaymentSubmit = async (event) => {
+    event.preventDefault();
+    
     try {
-      const purchaseDetails = await fetchPurchaseDetails(newPaymentData.supplier, newPaymentData.dateOfPurchase);
-      newPaymentData.totalAmount = purchaseDetails.totalAmount || 0;
-      newPaymentData.paidAmount = purchaseDetails.paidAmount || 0;
-      newPaymentData.pendingPayment = (parseFloat(newPaymentData.totalAmount) - parseFloat(newPaymentData.paidAmount)).toFixed(2);
+      await submitPayment(paymentData);
+      setSnackbarMessage('Payment Entry created successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      clearPaymentData();
+      setPaymentDialogOpen(false);
     } catch (error) {
-      setSnackbarMessage('Error fetching purchase details.');
+      console.error('Error creating payment entry:', error);
+      setSnackbarMessage('Error creating Payment Entry: ' + (error.message || 'Unknown error'));
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     }
-  } else {
-    if (name === 'totalAmount' || name === 'paidAmount') {
-      const totalAmount = parseFloat(newPaymentData.totalAmount) || 0;
-      const paidAmount = parseFloat(newPaymentData.paidAmount) || 0;
-      newPaymentData.pendingPayment = (totalAmount - paidAmount).toFixed(2);
-    }
-  }
-
-  setPaymentData(newPaymentData);
-};
-
-
-const handlePaymentSubmit = async (event) => {
-  event.preventDefault();
-  try {
-      
-    submitPayment(paymentData).then
-    (response => {
-             setSnackbarMessage('Payment Entry created successfully');
-             setSnackbarSeverity('success');
-             setSnackbarOpen(true);
-             clearPaymentData();
-           }).catch(error => {
-             setSnackbarMessage('Error creating Payment Entry');
-             setSnackbarSeverity('error');
-             setSnackbarOpen(true);
-       });
- } catch (error) {
-             setSnackbarMessage('Error creating Payment Entry');
-             setSnackbarSeverity('error');
-             setSnackbarOpen(true);
- }
-};
+  };
 
   return (
-    <div style={{ height: 'calc(100vh - 64px)', overflow: 'auto' }}>
-      <Container>
-        
-        <Typography variant="h4" gutterBottom>
-          Purchase Entry
-        </Typography>
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                label="Entry Date"
-                type="date"
-                fullWidth
-                name="entryDate"
-                value={formData.entryDate}
-                onChange={handleChange}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField select label="Vehicle No" fullWidth name="vehicle" value={formData.vehicle} onChange={handleChange} required>
-                {vehicles.map((vehicle) => (
-                  <MenuItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.vehicleNo}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField select label="Driver" fullWidth name="driver" value={formData.driver} onChange={handleChange} required>
-                {drivers.map((driver) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField select label="Supplier" fullWidth name="supplier" value={formData.supplier} onChange={handleChange} required>
-                {suppliers.map((supplier) => (
-                  <MenuItem key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField label="Branch" fullWidth name="branch" value={formData.branch} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField label="Farm" fullWidth name="farm" value={formData.farm} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField label="Supervisor Name" fullWidth name="supervisorName" value={formData.supervisorName} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                label="Supervisor Phone No"
-                type="number"
-                fullWidth
-                name="supervisorPhoneNo"
-                value={formData.supervisorPhoneNo}
-                onChange={handleChange}
-                inputProps={{ maxLength: 10, minLength: 10 }}
-              />
-            </Grid>
-          </Grid>
-          <Typography variant="h5" gutterBottom>
-            Entry Details
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Sr No</th>
-                    <th>DC No</th>
-                    <th>Nos</th>
-                    <th>Kilograms</th>
-                    <th>Rate</th>
-                    <th>Amount</th>
-                    <th>DC File</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* CSS to remove number input arrows */}
+      <style>
+        {`
+          input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          
+          input[type="number"] {
+            -moz-appearance: textfield;
+          }
+        `}
+      </style>
+
+      {/* Fixed Form Section */}
+      <Box sx={{ flexShrink: 0 }}>
+        <Container maxWidth="xl" sx={{ py: 2 }}>
+          {/* Purchase Information */}
+          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
+            <CardHeader 
+              title="Purchase Information" 
+              sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
+            />
+            <CardContent sx={{ py: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Entry Date"
+                    type="date"
+                    name="entryDate"
+                    value={formData.entryDate}
+                    onChange={handleChange}
+                    InputLabelProps={{ shrink: true }}
+                    required
+                    size="small"
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    select 
+                    fullWidth 
+                    label="Vehicle" 
+                    name="vehicle" 
+                    value={formData.vehicle} 
+                    onChange={handleChange} 
+                    required
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <VehicleIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Vehicle</em></MenuItem>
+                    {vehicles.map((vehicle) => (
+                      <MenuItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.vehicleNo}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    select 
+                    fullWidth 
+                    label="Driver" 
+                    name="driver" 
+                    value={formData.driver} 
+                    onChange={handleChange} 
+                    required
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <DriverIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Driver</em></MenuItem>
+                    {drivers.map((driver) => (
+                      <MenuItem key={driver.id} value={driver.id}>
+                        {driver.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    select 
+                    fullWidth 
+                    label="Supplier" 
+                    name="supplier" 
+                    value={formData.supplier} 
+                    onChange={handleChange} 
+                    required
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SupplierIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Supplier</em></MenuItem>
+                    {suppliers.map((supplier) => (
+                      <MenuItem key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    fullWidth 
+                    label="Branch" 
+                    name="branch" 
+                    value={formData.branch} 
+                    onChange={handleChange}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <BranchIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    fullWidth 
+                    label="Farm" 
+                    name="farm" 
+                    value={formData.farm} 
+                    onChange={handleChange}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <FarmIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    fullWidth 
+                    label="Supervisor Name" 
+                    name="supervisorName" 
+                    value={formData.supervisorName} 
+                    onChange={handleChange}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SupervisorIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Supervisor Phone"
+                    type="tel"
+                    name="supervisorPhoneNo"
+                    value={formData.supervisorPhoneNo}
+                    onChange={handleChange}
+                    inputProps={{ maxLength: 10, pattern: "[0-9]{10}" }}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <PhoneIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {/* Expenses Section */}
+          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
+            <CardHeader 
+              title="Expenses" 
+              sx={{ 
+                bgcolor: 'primary.main',
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
+            />
+            <CardContent sx={{ py: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    fullWidth
+                    label="Driver Expense" 
+                    type="number" 
+                    name="driverExpense" 
+                    value={formData.driverExpense} 
+                    onChange={handleChange}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <ExpenseIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    fullWidth
+                    label="Diesel Amount" 
+                    type="number" 
+                    name="diesel" 
+                    value={formData.diesel} 
+                    onChange={handleChange}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <DieselIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField 
+                    fullWidth
+                    label="Hamali Amount" 
+                    type="number" 
+                    name="hamali" 
+                    value={formData.hamali} 
+                    onChange={handleChange}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <HamaliIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                {/* Total Expenses moved here - same height, no background */}
+                <Grid item xs={12} sm={6} md={3}>
+                  <Box sx={{ 
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    pl: 2
+                  }}>
+                    <Typography variant="body1" sx={{ 
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                      color: 'text.primary'
+                    }}>
+                      Total: ₹{calculateTotalAmount().toFixed(2)}
+                    </Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Container>
+      </Box>
+
+      {/* Scrollable DC Details Section */}
+      <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Container maxWidth="xl" sx={{ height: '100%', pb: 1 }}>
+          <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+            <CardHeader 
+              title="DC Details" 
+              action={
+                <IconButton onClick={addRow} color="inherit" size="small">
+                  <AddIcon />
+                </IconButton>
+              }
+              sx={{ 
+                bgcolor: 'primary.main',
+                color: 'white',
+                py: 1,
+                flexShrink: 0,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
+            />
+            
+            {/* Scrollable Table */}
+            <TableContainer sx={{ flexGrow: 1, overflow: 'auto' }}>
+              <Table stickyHeader size="small">
+                <TableHead>
+                  <TableRow>
+                    {['Sr No', 'DC No', 'Quantity', 'Weight (kg)', 'Rate', 'Amount', 'DC File', 'Action'].map(header => (
+                      <TableCell 
+                        key={header} 
+                        sx={{ 
+                          fontWeight: 'bold', 
+                          bgcolor: '#f5f5f5',
+                          whiteSpace: 'nowrap',
+                          py: 1,
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        {header}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {tableRows.map((row, index) => (
-                    <tr key={index}>
-                      <td>{row.srNo}</td>
-                      <td>
+                    <TableRow 
+                      key={index} 
+                      hover
+                      sx={{ '& td': { py: 0.5 } }}
+                    >
+                      <TableCell sx={{ fontSize: '0.85rem' }}>{row.srNo}</TableCell>
+                      <TableCell>
                         <TextField
+                          size="small"
                           fullWidth
                           value={row.dcNo}
                           onChange={(e) => handleTableChange(index, 'dcNo', e.target.value)}
                           required
+                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
                         />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <TextField
+                          size="small"
                           fullWidth
-                          name='nos'
                           type="number"
                           value={row.nos}
                           onChange={(e) => handleTableChange(index, 'nos', e.target.value)}
                           required
+                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
                         />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <TextField
+                          size="small"
                           fullWidth
-                          name='kilograms'
                           type="number"
+                          step="0.01"
                           value={row.kilograms}
                           onChange={(e) => handleTableChange(index, 'kilograms', e.target.value)}
                           required
+                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
                         />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <TextField
+                          size="small"
                           fullWidth
+                          type="number"
+                          step="0.01"
                           value={row.rate}
                           onChange={(e) => handleTableChange(index, 'rate', e.target.value)}
                           required
+                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
                         />
-                      </td>
-                      <td>
-                        <TextField
-                          fullWidth
-                          name='amount'
-                          type="number"
-                          value={row.amount}
-                          onChange={(e) => handleTableChange(index, 'amount', e.target.value)}
-                          required
-                        />
-                      </td>
-                      <td>
-                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={handleFileChange} />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
+                        ₹{row.amount}
+                      </TableCell>
+                      <TableCell>
+                        <IconButton component="label" color="primary" size="small">
+                          <AttachFileIcon />
+                          <input 
+                            type="file" 
+                            accept=".jpg,.jpeg,.png,.pdf,.txt" 
+                            onChange={handleFileChange}
+                            hidden
+                          />
+                        </IconButton>
+                      </TableCell>
+                      <TableCell>
                         {index === 0 ? (
-                          <IconButton onClick={addRow}>
+                          <IconButton onClick={addRow} color="success" size="small">
                             <AddIcon />
                           </IconButton>
                         ) : (
-                          <IconButton onClick={() => deleteRow(index)}>
+                          <IconButton onClick={() => deleteRow(index)} color="error" size="small">
                             <DeleteIcon />
                           </IconButton>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                  <tr>
-                    <th colSpan={2}>Total</th>
-                    <th>{calculateTotal('nos')}</th>
-                    <th>{calculateTotal('kilograms')}</th>
-                    <th></th>
-                    <th>{calculateTotal('amount')}</th>
-                    <th colSpan={2}></th>
-                  </tr>
-                </tbody>
-              </table>
-            </Grid>
-          </Grid>
-          <Typography variant="h5" gutterBottom>
-            Expenses
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
-              <TextField label="Expense Paid to Driver" type="number" fullWidth name="driverExpense" value={formData.driverExpense} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField label="Diesel Amount" type="number" fullWidth name="diesel" value={formData.diesel} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField label="Hamali Amount" type="number" fullWidth name="hamali" value={formData.hamali} onChange={handleChange} />
-            </Grid>
-          </Grid>
-          <Typography variant="h6" gutterBottom>
-            Total Expenses: {calculateTotalAmount()}
-          </Typography>
-          <TextField label="Notes" multiline rows={4} fullWidth name="notes" value={formData.notes} onChange={handleChange} />
-          <Grid container spacing={2} style={{ marginTop: '16px' }}>
-            <Grid item>
-              <Button variant="contained" color="primary" type="submit">Submit</Button>
-            </Grid>
-            <Grid item>
-              <Button variant="contained" color="secondary" type="reset" onClick={handleClear}>Clear</Button>
-            </Grid>
-            <Grid item >
-              <Button variant="contained" color="primary" onClick={handleOpenPaymentDialog}>
-                Payment Details
-              </Button>
-            </Grid>
-          </Grid>
-        </form>
-        <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={3000}
-                onClose={handleCloseSnackbar}
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* Fixed Totals Row */}
+            <Box sx={{ 
+              borderTop: '2px solid #e0e0e0', 
+              bgcolor: 'primary.main',
+              flexShrink: 0 
+            }}>
+              <Table size="small">
+                <TableBody>
+                  <TableRow>
+                    <TableCell colSpan={2} sx={{ 
+                      fontWeight: 'bold', 
+                      color: 'white', 
+                      py: 1,
+                      bgcolor: 'primary.main',
+                      border: 'none'
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CalculateIcon />
+                        TOTALS
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold', 
+                      color: 'white',
+                      bgcolor: 'primary.main',
+                      border: 'none'
+                    }}>
+                      {calculateTotal('nos').toLocaleString()}
+                    </TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold', 
+                      color: 'white',
+                      bgcolor: 'primary.main',
+                      border: 'none'
+                    }}>
+                      {calculateTotal('kilograms').toFixed(2)} kg
+                    </TableCell>
+                    <TableCell sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold', 
+                      color: 'white',
+                      bgcolor: 'primary.main',
+                      border: 'none'
+                    }}>
+                      ₹{calculateTotal('amount').toFixed(2)}
+                    </TableCell>
+                    <TableCell colSpan={2} sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </Box>
+          </Card>
+        </Container>
+      </Box>
+
+      {/* Fixed Action Buttons */}
+      <Box sx={{ flexShrink: 0, borderTop: '1px solid #e0e0e0', bgcolor: 'white' }}>
+        <Container maxWidth="xl">
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            gap: 2, 
+            justifyContent: 'center',
+            py: 2
+          }}>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              type="submit"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+              size="large"
+              sx={{ minWidth: 150 }}
             >
-                <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
-                    {snackbarMessage}
-                </Alert>
-            </Snackbar>
-            <Dialog open={paymentDialogOpen} onClose={handleClosePaymentDialog}>
-  <DialogTitle>Payment Details</DialogTitle>
-  <DialogContent>
-    <DialogContentText>
-      Please fill in the payment details for the purchase.
-    </DialogContentText>
-    <form onSubmit={handlePaymentSubmit}>
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <TextField
-            label="Supplier"
-            select
-            fullWidth
-            name="supplier"
-            value={paymentData.supplier}
-            onChange={handlePaymentChange}
-            required
-          >
-            {suppliers.map((supplier) => (
-              <MenuItem key={supplier.id} value={supplier.id}>
-                {supplier.name}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Date of Purchase"
-            type="date"
-            name="dateOfPurchase"
-            value={paymentData.dateOfPurchase}
-            onChange={handlePaymentChange}
-            required
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Date of Transaction"
-            type="date"
-            name="dateOfTransaction"
-            value={paymentData.dateOfTransaction}
-            onChange={handlePaymentChange}
-            required
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Transaction ID"
-            name="trans_id"
-            value={paymentData.trans_id}
-            onChange={handlePaymentChange}
-            required
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Total Amount"
-            type="number"
-            name="totalAmount"
-            value={paymentData.totalAmount}
-            onChange={handlePaymentChange}
-            required
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Paid Amount"
-            type="number"
-            name="paidAmount"
-            value={paymentData.paidAmount}
-            onChange={handlePaymentChange}
-            required
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Pending Payment"
-            type="number"
-            name="pendingPayment"
-            value={paymentData.pendingPayment}
-            onChange={handlePaymentChange}
-            required
-            fullWidth
-            InputProps={{ readOnly: true }}
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            label="Comment"
-            name="comment"
-            value={paymentData.comment}
-            onChange={handlePaymentChange}     
-            fullWidth
-            multiline
-            rows={3}
-          />
-        </Grid>
-      </Grid>
-      <Grid container spacing={2} style={{ marginTop: '20px' }}>
-        <Grid item xs={4}>
-          <Button variant="contained" color="primary" type="submit">
-            Submit
-          </Button>
-        </Grid>
-        <Grid item xs={4}>
-            <Button variant="contained" color="warning" onClick={clearPaymentData}>
+              {isSubmitting ? 'Submitting...' : 'Submit'}
+            </Button>
+            
+            <Button 
+              variant="outlined" 
+              color="secondary" 
+              onClick={handleClear}
+              disabled={isSubmitting}
+              startIcon={<ClearIcon />}
+              size="large"
+              sx={{ minWidth: 120 }}
+            >
               Clear
             </Button>
-          </Grid>
-        <Grid item xs={4}>
-          <Button variant="contained" color="error" onClick={handleClosePaymentDialog}>
+            
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={handleOpenPaymentDialog}
+              startIcon={<PaymentIcon />}
+              size="large"
+              sx={{ minWidth: 150 }}
+            >
+              Payment Details
+            </Button>
+          </Box>
+        </Container>
+      </Box>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbarSeverity} 
+          sx={{ width: '100%' }}
+          elevation={6}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+
+      {/* Payment Dialog */}
+      <Dialog 
+        open={paymentDialogOpen} 
+        onClose={handleClosePaymentDialog} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 600 }}>
+          Payment Details
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <DialogContentText sx={{ mb: 3 }}>
+            Please fill in the payment details for the purchase transaction.
+          </DialogContentText>
+          <form onSubmit={handlePaymentSubmit}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Supplier"
+                  select
+                  fullWidth
+                  name="supplier"
+                  value={paymentData.supplier}
+                  onChange={handlePaymentChange}
+                  required
+                >
+                  <MenuItem value=""><em>Select Supplier</em></MenuItem>
+                  {suppliers.map((supplier) => (
+                    <MenuItem key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Date of Purchase"
+                  type="date"
+                  name="dateOfPurchase"
+                  value={paymentData.dateOfPurchase}
+                  onChange={handlePaymentChange}
+                  required
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Date of Transaction"
+                  type="date"
+                  name="dateOfTransaction"
+                  value={paymentData.dateOfTransaction}
+                  onChange={handlePaymentChange}
+                  required
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Transaction ID"
+                  name="trans_id"
+                  value={paymentData.trans_id}
+                  onChange={handlePaymentChange}
+                  required
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  label="Total Amount"
+                  type="number"
+                  name="totalAmount"
+                  value={paymentData.totalAmount}
+                  onChange={handlePaymentChange}
+                  required
+                  fullWidth
+                  InputProps={{ startAdornment: '₹' }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  label="Paid Amount"
+                  type="number"
+                  name="paidAmount"
+                  value={paymentData.paidAmount}
+                  onChange={handlePaymentChange}
+                  required
+                  fullWidth
+                  InputProps={{ startAdornment: '₹' }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  label="Pending Payment"
+                  type="number"
+                  name="pendingPayment"
+                  value={paymentData.pendingPayment}
+                  onChange={handlePaymentChange}
+                  required
+                  fullWidth
+                  InputProps={{ readOnly: true, startAdornment: '₹' }}
+                  sx={{ bgcolor: '#f9f9f9' }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Comment"
+                  name="comment"
+                  value={paymentData.comment}
+                  onChange={handlePaymentChange}
+                  fullWidth
+                  multiline
+                  rows={2}
+                  placeholder="Enter any payment related notes..."
+                />
+              </Grid>
+            </Grid>
+          </form>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            onClick={handlePaymentSubmit}
+            startIcon={<SaveIcon />}
+          >
+            Submit Payment
+          </Button>
+          <Button 
+            variant="outlined" 
+            color="warning" 
+            onClick={clearPaymentData}
+            startIcon={<ClearIcon />}
+          >
+            Clear
+          </Button>
+          <Button 
+            variant="outlined" 
+            color="error" 
+            onClick={handleClosePaymentDialog}
+          >
             Close
           </Button>
-        </Grid>
-      </Grid>
-    </form>
-  </DialogContent>
-</Dialog>
-      </Container>
-    </div>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 
 export default PurchaseEntryPage;
-

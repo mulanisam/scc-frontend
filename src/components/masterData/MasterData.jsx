@@ -1,4 +1,3 @@
-// components/masterData/MasterData.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -31,9 +30,29 @@ import {
   MenuItem,
   TableSortLabel,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Chip,
+  Card,
+  CardContent,
+  CardHeader,
+  Tooltip,
+  Fab,
+  Badge,
+  CircularProgress
 } from '@mui/material';
-import { Edit, Delete, Search } from '@mui/icons-material';
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Search as SearchIcon,
+  Add as AddIcon,
+  Storage as StorageIcon,
+  Clear as ClearIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  FilterList as FilterIcon
+} from '@mui/icons-material';
 import UserService from '../service/UserService';
 import {
   getData,
@@ -44,18 +63,18 @@ import {
 
 const baseDataTypes = [
   'customers',
-  'routes',
+  'routes', 
   'drivers',
   'cities',
   'vehicles',
   'suppliers',
 ];
+
 const adminDataTypes = ['parties', 'partyVehicles'];
 
 export default function MasterData() {
   const theme = useTheme();
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
-
   const allTabs = UserService.adminOnly()
     ? [...baseDataTypes, ...adminDataTypes]
     : baseDataTypes;
@@ -63,9 +82,12 @@ export default function MasterData() {
   const [tabIndex, setTabIndex] = useState(0);
   const [dataType, setDataType] = useState(allTabs[0]);
   const [data, setData] = useState([]);
+  const [filteredData, setFilteredData] = useState([]);
   const [openForm, setOpenForm] = useState(false);
   const [formData, setFormData] = useState({});
   const [editMode, setEditMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
@@ -73,24 +95,45 @@ export default function MasterData() {
   const [searchTerm, setSearchTerm] = useState('');
   const [cities, setCities] = useState([]);
   const [routes, setRoutes] = useState([]);
-  const [partyVehicles, setPartyVehicles] = useState([]);
   const [parties, setParties] = useState([]);
   const [expirationMessage, setExpirationMessage] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, id: null });
+
+  // CSS to remove number input arrows
+  const numberInputStyles = `
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+  `;
 
   useEffect(() => {
     fetchData(dataType);
   }, [dataType]);
 
   useEffect(() => {
-    if (data.length && sortConfig.key) {
-      const sorted = [...data].sort((a, b) => {
+    // Filter and sort data
+    let filtered = data.filter(row => 
+      Object.values(row).some(v =>
+        String(v).toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    );
+
+    if (sortConfig.key) {
+      filtered.sort((a, b) => {
         if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
-      setData(sorted);
     }
-  }, [sortConfig]);
+
+    setFilteredData(filtered);
+  }, [data, searchTerm, sortConfig]);
 
   useEffect(() => {
     if (['customers', 'cities'].includes(dataType)) {
@@ -99,7 +142,9 @@ export default function MasterData() {
     if (['customers', 'cities', 'routes'].includes(dataType)) {
       getData('routes').then(res => setRoutes(res.data));
     }
-     
+    if (dataType === 'partyVehicles') {
+      getData('parties').then(res => setParties(res.data));
+    }
   }, [dataType]);
 
   useEffect(() => {
@@ -107,11 +152,11 @@ export default function MasterData() {
       const today = new Date();
       const messages = [];
       data.forEach(item => {
-        const fields = ['passingDate','insuranceDate','fitnessDate','pucdate'];
+        const fields = ['passingDate', 'insuranceDate', 'fitnessDate', 'pucdate'];
         const msgs = [];
         fields.forEach(f => {
           if (item[f]) {
-            const diff = Math.floor((new Date(item[f]) - today)/(1000*60*60*24));
+            const diff = Math.floor((new Date(item[f]) - today) / (1000 * 60 * 60 * 24));
             if (diff <= 0) msgs.push(`${f} expired`);
             else if (diff <= 30) msgs.push(`${f} expiring in ${diff} days!`);
           }
@@ -124,20 +169,24 @@ export default function MasterData() {
     }
   }, [data, dataType]);
 
-  const fetchData = (type) => {
-    getData(type)
-      .then(res => {
-        let md = res.data;
-        if (type === 'routes') md = md.map(r => ({ ...r, cities: r.cities.map(c=>c.name).join(', ') }));
-        if (type === 'customers') md = md.map(c => ({ ...c, city: c.city.name, route: c.city.route.name }));
-        if (type === 'cities') md = md.map(({customers, ...c})=>({ ...c, route: c.route.name }));
-        if (type === 'partyVehicles') md = md.map(pv => ({ ...pv, party: pv.party.name }));
-        if (type === 'parties') {md = md.map(p => ({ ...p,partyVehicles: p.partyVehicles ? p.partyVehicles.map(pv => pv.vehicleNumber).join(', ') : ''}));
-}
-         
-        setData(md);
-      })
-      .catch(() => showSnackbar(`Error fetching ${type}`, 'error'));
+  const fetchData = async (type) => {
+    setLoading(true);
+    try {
+      const res = await getData(type);
+      let md = res.data;
+      if (type === 'routes') md = md.map(r => ({ ...r, cities: r.cities.map(c => c.name).join(', ') }));
+      if (type === 'customers') md = md.map(c => ({ ...c, city: c.city.name, route: c.city.route.name }));
+      if (type === 'cities') md = md.map(({ customers, ...c }) => ({ ...c, route: c.route.name }));
+      if (type === 'partyVehicles') md = md.map(pv => ({ ...pv, party: pv.party.name }));
+      if (type === 'parties') {
+        md = md.map(p => ({ ...p, partyVehicles: p.partyVehicles ? p.partyVehicles.map(pv => pv.vehicleNumber).join(', ') : '' }));
+      }
+      setData(md);
+    } catch (error) {
+      showSnackbar(`Error fetching ${type}`, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const showSnackbar = (msg, sev) => {
@@ -153,305 +202,505 @@ export default function MasterData() {
     setSortConfig({ key: null, direction: 'ascending' });
   };
 
-  const handleOpenForm = (type, row={}) => {
+  const handleOpenForm = (type, row = {}) => {
     setDataType(type);
-    setFormData({ ...row, obsolete: row.obsolete||0 });
+    setFormData({ ...row, obsolete: row.obsolete || 0 });
     setEditMode(!!row.id);
     setOpenForm(true);
   };
+
   const handleCloseForm = () => {
     setOpenForm(false);
     setFormData({});
     setEditMode(false);
   };
+
   const handleFormChange = e => setFormData({ ...formData, [e.target.name]: e.target.value });
-  const handleSubmitForm = () => {
-    const payload = { ...formData, obsolete:false };
-    const api = editMode ? updateData : createData;
-    api(dataType, formData.id, payload)
-      .then(() => {
-        showSnackbar(`${capitalize(dataType)} ${editMode?'updated':'created'} successfully`, 'success');
-        fetchData(dataType);
-        handleCloseForm();
-      })
-      .catch(() => showSnackbar(`Error ${editMode?'updating':'creating'} ${dataType}`, 'error'));
+
+  const handleSubmitForm = async () => {
+    setSubmitting(true);
+    try {
+      const payload = { ...formData, obsolete: false };
+      const api = editMode ? updateData : createData;
+      await api(dataType, formData.id, payload);
+      showSnackbar(`${capitalize(dataType)} ${editMode ? 'updated' : 'created'} successfully`, 'success');
+      fetchData(dataType);
+      handleCloseForm();
+    } catch (error) {
+      showSnackbar(`Error ${editMode ? 'updating' : 'creating'} ${dataType}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
-  const handleDelete = id => {
-    deleteData(dataType, id)
-      .then(() => {
-        showSnackbar(`${capitalize(dataType)} deleted successfully`, 'success');
-        fetchData(dataType);
-      })
-      .catch(() => showSnackbar(`Error deleting ${dataType}`, 'error'));
+
+  const handleDeleteConfirm = (id) => {
+    setConfirmDelete({ open: true, id });
   };
+
+  const handleDelete = async () => {
+    try {
+      await deleteData(dataType, confirmDelete.id);
+      showSnackbar(`${capitalize(dataType)} deleted successfully`, 'success');
+      fetchData(dataType);
+      setConfirmDelete({ open: false, id: null });
+    } catch (error) {
+      showSnackbar(`Error deleting ${dataType}`, 'error');
+    }
+  };
+
   const handleSort = key => {
     let dir = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction==='ascending') dir='descending';
-    setSortConfig({ key, direction:dir });
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') dir = 'descending';
+    setSortConfig({ key, direction: dir });
   };
-  const handleSearch = e => setSearchTerm(e.target.value);
-  const capitalize = s => s.charAt(0).toUpperCase()+s.slice(1);
+
+  const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+  const clearSearch = () => {
+    setSearchTerm('');
+  };
 
   return (
-    <Container maxWidth={false} sx={{ py:2, width:'95%', mx:'auto' }}>
-      <Paper sx={{ p:2, mb:2 }}>
-        <Typography variant="h4" gutterBottom>Master Data Management</Typography>
-        <Tabs
-          value={tabIndex}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
-          sx={{
-            '& .MuiTab-root': {
-              flex: 1,
-              minWidth: 0
-            }
-          }}
-        >
-          {allTabs.map(type=>(
-            <Tab key={type} label={capitalize(type)} />
-          ))}
-        </Tabs>
-        <Box sx={{ mt:2, textAlign:'right' }}>
-          <Button
-            size="small"
-            variant="contained"
-            color="success"
-            onClick={()=>handleOpenForm(dataType)}
-            sx={{ width:'auto', textTransform:'none' }}
-          >
-            Add {capitalize(dataType.endsWith('s')?dataType.slice(0,-1):dataType)}
-          </Button>
-        </Box>
-      </Paper>
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      <style>{numberInputStyles}</style>
 
-      <Paper sx={{ p:2, mb:2 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs>
-            <TextField
-              fullWidth
-              variant="outlined"
-              size="small"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={handleSearch}
-              InputProps={{
-                startAdornment:(
-                  <InputAdornment position="start">
-                    <Search/>
-                  </InputAdornment>
-                )
+      {/* Fixed Header Section */}
+      <Box sx={{ flexShrink: 0 }}>
+        <Container maxWidth="xl" sx={{ py: 2 }}>
+          {/* Header - Navbar Style */}
+          <Paper elevation={2} sx={{ 
+            mb: 2, 
+            borderRadius: 2, 
+            bgcolor: 'primary.main',
+            color: 'white',
+            p: 1.5
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <StorageIcon sx={{ fontSize: 28, color: 'white' }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: 'white' }}>
+                  Master Data Management
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Chip 
+                  label={`${capitalize(dataType)}`} 
+                  sx={{ 
+                    bgcolor: 'white', 
+                    color: 'primary.main',
+                    fontWeight: 600
+                  }}
+                />
+                <Badge badgeContent={data.length} color="secondary">
+                  <CheckCircleIcon sx={{ color: 'white' }} />
+                </Badge>
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* Navigation Tabs */}
+          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
+            <CardContent sx={{ p: 0 }}>
+              <Tabs 
+                value={tabIndex} 
+                onChange={handleTabChange} 
+                variant="scrollable"
+                scrollButtons="auto"
+                sx={{
+                  '& .MuiTab-root': {
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    minWidth: 'auto',
+                    px: 2,
+                    py: 1.5
+                  },
+                  '& .Mui-selected': {
+                    fontWeight: 600,
+                    color: 'primary.main'
+                  }
+                }}
+              >
+                {allTabs.map(type => (
+                  <Tab key={type} label={capitalize(type)} />
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
+
+          {/* Search and Controls */}
+          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
+            <CardContent sx={{ py: 1.5 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} md={8}>
+                  <TextField
+                    fullWidth
+                    placeholder={`Search ${dataType}...`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon color="primary" />
+                        </InputAdornment>
+                      ),
+                      endAdornment: searchTerm && (
+                        <InputAdornment position="end">
+                          <IconButton size="small" onClick={clearSearch}>
+                            <ClearIcon />
+                          </IconButton>
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<AddIcon />}
+                      onClick={() => handleOpenForm(dataType)}
+                      size="small"
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Add New
+                    </Button>
+                    
+                    <Tooltip title="Refresh Data">
+                      <IconButton 
+                        color="primary" 
+                        onClick={() => fetchData(dataType)}
+                        disabled={loading}
+                      >
+                        {loading ? <CircularProgress size={20} /> : <FilterIcon />}
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Grid>
+                
+                {expirationMessage && (
+                  <Grid item xs={12}>
+                    <Alert 
+                      severity="warning" 
+                      sx={{ borderRadius: 2 }}
+                      icon={<WarningIcon />}
+                    >
+                      <Typography variant="body2">
+                        <strong>Vehicle Expiration Alerts:</strong> {expirationMessage}
+                      </Typography>
+                    </Alert>
+                  </Grid>
+                )}
+              </Grid>
+            </CardContent>
+          </Card>
+        </Container>
+      </Box>
+
+      {/* Scrollable Data Table Section */}
+      <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+        <Container maxWidth="xl" sx={{ height: '100%', pb: 2 }}>
+          <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+            <CardHeader 
+              title={`${capitalize(dataType)} Data`}
+              action={
+                <Chip 
+                  label={`${filteredData.length} of ${data.length} records`}
+                  color="primary"
+                  size="small"
+                />
+              }
+              sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                flexShrink: 0,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
               }}
             />
-          </Grid>
-          <Grid item>
-            <Typography color="error" variant="body2">{expirationMessage}</Typography>
-          </Grid>
-        </Grid>
+            
+            <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+              {loading ? (
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  height: '200px' 
+                }}>
+                  <CircularProgress size={60} />
+                  <Typography variant="h6" sx={{ ml: 2 }}>Loading...</Typography>
+                </Box>
+              ) : (
+                <TableContainer>
+                  <Table stickyHeader size="small">
+                    <TableHead>
+                      <TableRow>
+                        {(data[0] ? Object.keys(data[0]) : []).map(key => (
+                          <TableCell 
+                            key={key} 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              bgcolor: '#f5f5f5',
+                              color: 'primary.main',
+                              py: 1,
+                              fontSize: '0.85rem',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <TableSortLabel 
+                              active={sortConfig.key === key}
+                              direction={sortConfig.key === key ? sortConfig.direction : 'asc'}
+                              onClick={() => handleSort(key)}
+                            >
+                              {key.replace(/([a-z])([A-Z])/g, '$1 $2').toUpperCase()}
+                            </TableSortLabel>
+                          </TableCell>
+                        ))}
+                        <TableCell sx={{ 
+                          fontWeight: 'bold',
+                          bgcolor: '#f5f5f5',
+                          color: 'primary.main',
+                          py: 1,
+                          fontSize: '0.85rem'
+                        }}>
+                          ACTIONS
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {filteredData.map(row => (
+                        <TableRow 
+                          key={row.id} 
+                          hover
+                          sx={{ '& td': { py: 0.5, fontSize: '0.85rem' } }}
+                        >
+                          {Object.values(row).map((val, i) => (
+                            <TableCell 
+                              key={i}
+                              sx={{ whiteSpace: 'nowrap', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : val}
+                            </TableCell>
+                          ))}
+                          <TableCell>
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <Tooltip title="Edit">
+                                <IconButton 
+                                  size="small" 
+                                  color="primary"
+                                  onClick={() => handleOpenForm(dataType, row)}
+                                  sx={{ p: 0.5 }}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Delete">
+                                <IconButton 
+                                  size="small" 
+                                  color="error"
+                                  onClick={() => handleDeleteConfirm(row.id)}
+                                  sx={{ p: 0.5 }}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {filteredData.length === 0 && (
+                        <TableRow>
+                          <TableCell 
+                            colSpan={(data[0] ? Object.keys(data[0]).length : 0) + 1} 
+                            sx={{ textAlign: 'center', py: 4 }}
+                          >
+                            <Typography variant="body1" color="text.secondary">
+                              {searchTerm ? 'No matching records found' : 'No data available'}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
+          </Card>
+        </Container>
+      </Box>
 
-        <TableContainer component={Paper} sx={{ mt:2 }}>
-          <Table size={isSmall?'small':'medium'}>
-            <TableHead>
-              <TableRow sx={{ height:48 }}>
-                {(data[0]?Object.keys(data[0]):[]).map(key=>(
-                  <TableCell key={key} onClick={()=>handleSort(key)} sx={{ py:0.75 }}>
-                    <TableSortLabel
-                      active={sortConfig.key===key}
-                      direction={sortConfig.key===key?sortConfig.direction:'asc'}
-                    />
-                    {key.replace(/([a-z])([A-Z])/g,'$1 $2').toUpperCase()}
-                  </TableCell>
-                ))}
-                <TableCell sx={{ py:0.75 }}>ACTIONS</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data
-                .filter(row=>Object.values(row).some(v=>
-                  String(v).toLowerCase().includes(searchTerm.toLowerCase())
-                ))
-                .map(row=>(
-                  <TableRow key={row.id} sx={{ height:48 }}>
-                    {Object.values(row).map((val,i)=>(
-                      <TableCell key={i} sx={{ py:0.75 }}>{val}</TableCell>
-                    ))}
-                    <TableCell sx={{ py:0.75 }}>
-                      <Box sx={{ display:'inline-flex', gap:0 }}>
-                        <IconButton size="small" color="secondary" onClick={()=>handleOpenForm(dataType,row)}>
-                          <Edit fontSize="inherit"/>
-                        </IconButton>
-                        <IconButton size="small" color="error" onClick={()=>handleDelete(row.id)}>
-                          <Delete fontSize="inherit"/>
-                        </IconButton>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
-
-      <Dialog open={openForm} onClose={handleCloseForm} fullWidth maxWidth="md">
-        <DialogTitle>
+      {/* Form Dialog */}
+      <Dialog open={openForm} onClose={handleCloseForm} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 600 }}>
           {editMode ? `Edit ${capitalize(dataType)}` : `Add New ${capitalize(dataType)}`}
         </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Please fill out the form below to {editMode?'update':'add'} the {dataType}.
+        <DialogContent sx={{ mt: 2 }}>
+          <DialogContentText sx={{ mb: 3 }}>
+            Please fill out the form below to {editMode ? 'update' : 'add'} the {dataType}.
           </DialogContentText>
-          {(data[0]?Object.keys(data[0]):[]).map(key=>{
-            if(['id','obsolete'].includes(key)) return null;
-            if (dataType === 'parties' && !editMode) {
-              if (key === 'isObsolete' || key.toLowerCase().includes('partyvehicle')) {
-                return null; // skip these fields
-              }
-            }
+          
+          <Grid container spacing={2}>
+            {(data[0] ? Object.keys(data[0]) : []).map(key => {
+              if (['id', 'obsolete'].includes(key)) return null;
 
-            // When editing a party, show isObsolete as boolean select, remove partyVehicles input
-            if (dataType === 'parties' && editMode) {
-              if (key.toLowerCase().includes('partyvehicle')) {
-                return null; // skip partyVehicles inputs on edit
-              }
-              if (key === 'isObsolete') {
+              // Handle special field types
+              if (dataType === 'vehicles' && ['passingDate', 'insuranceDate', 'fitnessDate', 'pucdate'].includes(key)) {
                 return (
-                  <FormControl key={key} fullWidth margin="dense" size="small">
-                    <InputLabel>Is Obsolete</InputLabel>
-                    <Select
-                      name="isObsolete"
-                      value={formData.isObsolete === undefined ? '' : formData.isObsolete}
+                  <Grid item xs={12} sm={6} key={key}>
+                    <TextField
+                      fullWidth
+                      name={key}
+                      label={key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase())}
+                      type="date"
+                      value={formData[key] || ''}
                       onChange={handleFormChange}
-                      label="Is Obsolete"
-                    >
-                      <MenuItem value={true}>True</MenuItem>
-                      <MenuItem value={false}>False</MenuItem>
-                    </Select>
-                  </FormControl>
+                      InputLabelProps={{ shrink: true }}
+                      size="small"
+                    />
+                  </Grid>
                 );
               }
-            }
-            // Remove isObsolete from add partyVehicle form
-            if (dataType === 'partyVehicles' && !editMode && key === 'isObsolete') {
-              return null;
-            }
 
-            // In edit mode for partyVehicles, show isObsolete as boolean select
-            if (dataType === 'partyVehicles' && editMode && key === 'isObsolete') {
-              return (
-                <FormControl key={key} fullWidth margin="dense" size="small">
-                  <InputLabel>Is Obsolete</InputLabel>
-                  <Select
-                    name="isObsolete"
-                    value={formData.isObsolete === undefined ? '' : formData.isObsolete}
-                    onChange={handleFormChange}
-                    label="Is Obsolete"
-                  >
-                    <MenuItem value={true}>True</MenuItem>
-                    <MenuItem value={false}>False</MenuItem>
-                  </Select>
-                </FormControl>
-              );
-            }
+              if (dataType === 'customers' && key === 'city') {
+                return (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>City</InputLabel>
+                      <Select
+                        name={key}
+                        value={formData[key] || ''}
+                        onChange={handleFormChange}
+                      >
+                        {cities.map(c => (
+                          <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                );
+              }
 
-            // Show party dropdown (both add and edit)
-            if (dataType === 'partyVehicles' && key === 'party') {
+              if (['customers', 'cities'].includes(dataType) && key === 'route') {
+                return (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Route</InputLabel>
+                      <Select
+                        name={key}
+                        value={formData[key] || ''}
+                        onChange={handleFormChange}
+                      >
+                        {routes.map(r => (
+                          <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                );
+              }
+
+              if (dataType === 'partyVehicles' && key === 'party') {
+                return (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Party</InputLabel>
+                      <Select
+                        name={key}
+                        value={formData[key] || ''}
+                        onChange={handleFormChange}
+                      >
+                        {parties.map(p => (
+                          <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                );
+              }
+
               return (
-                <FormControl key={key} fullWidth margin="dense" size="small">
-                  <InputLabel>Party</InputLabel>
-                  <Select
-                    name="party"
-                    value={formData.party?.id || formData.party || ''}
+                <Grid item xs={12} sm={6} key={key}>
+                  <TextField
+                    fullWidth
+                    name={key}
+                    label={key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase())}
+                    value={formData[key] || ''}
                     onChange={handleFormChange}
-                    label="Party"
-                  >
-                    {parties.map(p => (
-                      <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    type={typeof data[0]?.[key] === 'number' ? 'number' : 'text'}
+                    size="small"
+                  />
+                </Grid>
               );
-            }
-            if(dataType==='customers'&&key==='city'){
-              return (
-                <FormControl key={key} fullWidth margin="dense" size="small">
-                  <InputLabel>City</InputLabel>
-                  <Select
-                    name="city"
-                    value={formData.city||''}
-                    onChange={handleFormChange}
-                  >
-                    {cities.map(c=>(
-                      <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              );
-            }
-            if(['customers','cities'].includes(dataType)&&key==='route'){
-              return (
-                <FormControl key={key} fullWidth margin="dense" size="small">
-                  <InputLabel>Route</InputLabel>
-                  <Select
-                    name="route"
-                    value={formData.route||''}
-                    onChange={handleFormChange}
-                  >
-                    {routes.map(r=>(
-                      <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              );
-            }
-            if(dataType==='vehicles'&&['passingDate','insuranceDate','fitnessDate','pucdate'].includes(key)){
-              return (
-                <TextField
-                  key={key}
-                  margin="dense"
-                  name={key}
-                  label={capitalize(key)}
-                  type="date"
-                  fullWidth
-                  size="small"
-                  value={formData[key]||''}
-                  onChange={handleFormChange}
-                  InputLabelProps={{ shrink:true }}
-                />
-              );
-            }
-            return (
-              <TextField
-                key={key}
-                margin="dense"
-                name={key}
-                label={capitalize(key)}
-                fullWidth
-                size="small"
-                value={formData[key]||''}
-                onChange={handleFormChange}
-              />
-            );
-          })}
+            })}
+          </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseForm} size="small">Cancel</Button>
-          <Button onClick={handleSubmitForm} size="small">
-            {editMode?'Update':'Add'}
+        
+        <DialogActions sx={{ p: 3 }}>
+          <Button 
+            onClick={handleCloseForm} 
+            color="secondary"
+            startIcon={<CancelIcon />}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmitForm} 
+            variant="contained" 
+            color="primary"
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+            disabled={submitting}
+          >
+            {submitting ? 'Saving...' : (editMode ? 'Update' : 'Add')}
           </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={confirmDelete.open} onClose={() => setConfirmDelete({ open: false, id: null })}>
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>
+          Confirm Delete
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this {dataType}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setConfirmDelete({ open: false, id: null })} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar */}
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={()=>setSnackbarOpen(false)}
-        anchorOrigin={{ vertical:'top', horizontal:'center' }}
+        autoHideDuration={4000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert severity={snackbarSeverity} onClose={()=>setSnackbarOpen(false)} size="small">
+        <Alert 
+          onClose={() => setSnackbarOpen(false)} 
+          severity={snackbarSeverity} 
+          sx={{ width: '100%' }}
+          elevation={6}
+        >
           {snackbarMessage}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 }

@@ -1,549 +1,557 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Container,
-  Paper,
-  Tabs,
-  Tab,
-  Box,
-  Grid,
-  TextField,
-  Select,
-  MenuItem,
-  Button,
-  Typography,
-  Snackbar,
+import { 
+  Container, 
+  Paper, 
+  Tabs, 
+  Tab, 
+  Box, 
+  Grid, 
+  TextField, 
+  MenuItem, 
+  Button, 
+  Typography, 
+  Snackbar, 
   Alert,
+  Card,
+  CardContent,
+  CardHeader,
+  Chip,
+  InputAdornment,
+  Divider
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
 import {
-  getParties,
-  getSuppliers,
-  getBalanceAmount,
-  createSalesEntry,
-  createPaymentEntry,
-  getVehiclesByParty
-} from '../service/TradingService'; // Update with your actual APIs
+  TrendingUp as TradingIcon,
+  ShoppingCart as SalesIcon,
+  Payment as PaymentIcon
+} from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { 
+  getParties, 
+  getSuppliers, 
+  createSalesEntry, 
+  createPaymentEntry, 
+  getVehiclesByParty 
+} from '../service/TradingService';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
-
   return (
-    <div role="tabpanel" hidden={value !== index} {...other}>
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`trading-tabpanel-${index}`}
+      aria-labelledby={`trading-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
     </div>
   );
 }
 
-const TradingPage = () => {
+function TradingPage() {
   const navigate = useNavigate();
-
-  const [tabIndex, setTabIndex] = useState(0);
+  const [tabValue, setTabValue] = useState(0);
   const [parties, setParties] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-
-  // Shared selections
-  const [selectedPartySales, setSelectedPartySales] = useState('');
-  const [selectedSupplierSales, setSelectedSupplierSales] = useState('');
-  const [selectedPartyPayment, setSelectedPartyPayment] = useState('');
-  const [selectedSupplierPayment, setSelectedSupplierPayment] = useState('');
-  const [selectedVehicleSales, setSelectedVehicleSales] = useState('');
-
-  // Sales tab state
-  const [salesData, setSalesData] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    birds: '',
-    kilograms: '',
-    rate: '',
-    amount: 0,
-    payment: '',
-    pending: 0,
-    balanceAmount: '',
-    description: '',
-  });
-
-  // Payments tab state
-  const [paymentData, setPaymentData] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    saleDate: '',
-    amountReceived: '',
-    transactionId: '',
-    notes: '',
-  });
-
+  const [loading, setLoading] = useState(false);
+  
+  // Snackbar state
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
-    severity: 'success',
+    severity: 'success'
+  });
+
+  // Sales Entry State
+  const [salesData, setSalesData] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    party: '',
+    vehicle: '',
+    quantity: '',
+    rate: '',
+    amount: '',
+    description: ''
+  });
+
+  // Payment Entry State
+  const [paymentData, setPaymentData] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    party: '',
+    amount: '',
+    paymentMode: 'cash',
+    transactionId: '',
+    description: ''
   });
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const [partiesResponse, suppliersResponse] = await Promise.all([getParties(), getSuppliers()]);
-        setParties(partiesResponse.data);
-        setSuppliers(suppliersResponse.data);
-      } catch (error) {
-        console.error('Error fetching parties or Suppliers:', error);
-      }
-    };
     fetchInitialData();
   }, []);
 
-  // Fetch vehicles when party changes in Sales tab
-  useEffect(() => {
-    const fetchVehicles = async () => {
-      if (selectedPartySales) {
-        try {
-          const response = await getVehiclesByParty(selectedPartySales);
-          setVehicles(response.data);
-        } catch (error) {
-          console.error('Error fetching vehicles for party:', error);
-          setVehicles([]);
-        }
-      } else {
-        setVehicles([]);
-        setSelectedVehicleSales('');
-      }
-    };
-    fetchVehicles();
-  }, [selectedPartySales]);
-  // Fetch balance amount whenever party or Supplier changes in Sales tab
-  useEffect(() => {
-    const fetchBalance = async () => {
-      if (selectedPartySales && selectedSupplierSales) {
-        try {
-          const response = await getBalanceAmount(selectedPartySales, selectedSupplierSales);
-          setSalesData((prev) => ({
-            ...prev,
-            balanceAmount: response.data.balanceAmount || '',
-          }));
-        } catch (error) {
-          console.error('Error fetching balance amount:', error);
-          setSalesData((prev) => ({
-            ...prev,
-            balanceAmount: '',
-          }));
-        }
-      } else {
-        setSalesData((prev) => ({
-          ...prev,
-          balanceAmount: '',
-        }));
-      }
-    };
-    fetchBalance();
-  }, [selectedPartySales, selectedSupplierSales]);
+  const fetchInitialData = async () => {
+    setLoading(true);
+    try {
+      const [partiesRes, suppliersRes] = await Promise.all([
+        getParties(),
+        getSuppliers()
+      ]);
+      setParties(partiesRes.data || []);
+      setSuppliers(suppliersRes.data || []);
+    } catch (error) {
+      showSnackbar('Error loading data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Compute amount and pending in sales form
-  useEffect(() => {
-    const birdsNum = Number(salesData.birds || 0);
-    const kgNum = Number(salesData.kilograms || 0);
-    const rateNum = Number(salesData.rate || 0);
-    const paymentNum = Number(salesData.payment || 0);
-    const amountCalc = Math.round((rateNum * kgNum) / 10) * 10;
-    const pendingCalc = amountCalc - paymentNum;
-
-    setSalesData((prev) => ({
-      ...prev,
-      amount: amountCalc,
-      pending: pendingCalc >= 0 ? pendingCalc : 0,
-    }));
-  }, [salesData.birds, salesData.kilograms, salesData.rate, salesData.payment]);
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
 
   const handleTabChange = (event, newValue) => {
-    setTabIndex(newValue);
+    setTabValue(newValue);
   };
 
-  const handleSalesChange = (field, value) => {
-    setSalesData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+  // Sales Entry Handlers
+  const handleSalesChange = async (field, value) => {
+    setSalesData(prev => ({ ...prev, [field]: value }));
+    
+    if (field === 'party' && value) {
+      try {
+        const vehiclesRes = await getVehiclesByParty(value);
+        setVehicles(vehiclesRes.data || []);
+      } catch (error) {
+        showSnackbar('Error loading vehicles', 'error');
+      }
+    }
 
-  const handlePaymentChange = (field, value) => {
-    setPaymentData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    if ((field === 'quantity' || field === 'rate') && salesData.quantity && salesData.rate) {
+      const quantity = field === 'quantity' ? parseFloat(value) : parseFloat(salesData.quantity);
+      const rate = field === 'rate' ? parseFloat(value) : parseFloat(salesData.rate);
+      setSalesData(prev => ({ ...prev, amount: (quantity * rate).toFixed(2) }));
+    }
   };
 
   const handleSalesSubmit = async () => {
-    if (!selectedPartySales || !selectedSupplierSales || !salesData.date) {
-      setSnackbar({ open: true, message: 'Date, Party, and Supplier are required.', severity: 'error' });
+    if (!salesData.party || !salesData.vehicle || !salesData.quantity || !salesData.rate) {
+      showSnackbar('Please fill all required fields', 'error');
       return;
     }
 
+    setLoading(true);
     try {
-      await createSalesEntry({
-        partyId: selectedPartySales,
-        supplierId: selectedSupplierSales,
-        ...salesData,
-        birds: Number(salesData.birds),
-        kilograms: Number(salesData.kilograms),
-        rate: Number(salesData.rate),
-        amount: salesData.amount,
-        payment: Number(salesData.payment),
-        pending: salesData.pending,
-        balanceAmount: Number(salesData.balanceAmount),
-        description: salesData.description,
-      });
-
-      setSnackbar({ open: true, message: 'Sales entry created successfully.', severity: 'success' });
-      // Reset sales form
-      setSelectedPartySales('');
-      setSelectedSupplierSales('');
+      await createSalesEntry(salesData);
+      showSnackbar('Sales entry created successfully');
       setSalesData({
         date: new Date().toISOString().slice(0, 10),
-        birds: '',
-        kilograms: '',
+        party: '',
+        vehicle: '',
+        quantity: '',
         rate: '',
-        amount: 0,
-        payment: '',
-        pending: 0,
-        balanceAmount: '',
-        description: '',
+        amount: '',
+        description: ''
       });
     } catch (error) {
-      setSnackbar({ open: true, message: 'Error creating sales entry.', severity: 'error' });
+      showSnackbar('Error creating sales entry', 'error');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Payment Entry Handlers
+  const handlePaymentChange = (field, value) => {
+    setPaymentData(prev => ({ ...prev, [field]: value }));
   };
 
   const handlePaymentSubmit = async () => {
-    if (!selectedPartyPayment || !selectedSupplierPayment || !paymentData.date || !paymentData.saleDate || !paymentData.amountReceived) {
-      setSnackbar({
-        open: true,
-        message: 'Date, Sale Date, Party, Supplier, and Amount Received are required.',
-        severity: 'error',
-      });
+    if (!paymentData.party || !paymentData.amount) {
+      showSnackbar('Please fill all required fields', 'error');
       return;
     }
 
+    setLoading(true);
     try {
-      await createPaymentEntry({
-        partyId: selectedPartyPayment,
-       supplierId: selectedSupplierPayment,
-        ...paymentData,
-        amountReceived: Number(paymentData.amountReceived),
-      });
-
-      setSnackbar({ open: true, message: 'Payment recorded successfully.', severity: 'success' });
-      // Reset payment form
-      setSelectedPartyPayment('');
-      setSelectedSupplierPayment('');
+      await createPaymentEntry(paymentData);
+      showSnackbar('Payment entry created successfully');
       setPaymentData({
         date: new Date().toISOString().slice(0, 10),
-        saleDate: '',
-        amountReceived: '',
+        party: '',
+        amount: '',
+        paymentMode: 'cash',
         transactionId: '',
-        notes: '',
+        description: ''
       });
     } catch (error) {
-      setSnackbar({ open: true, message: 'Error recording payment.', severity: 'error' });
+      showSnackbar('Error creating payment entry', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    navigate('/dashboard'); // Adjust this path to your dashboard route
-  };
-
-  const handleSnackbarClose = () => {
-    setSnackbar((prev) => ({ ...prev, open: false }));
-  };
-
   return (
-    <Container maxWidth="md" sx={{ mt: 4 }}>
-      <Paper elevation={3}>
-        <Tabs value={tabIndex} onChange={handleTabChange} aria-label="Sales and Payments Tabs" centered>
-          <Tab label="Sales" />
-          <Tab label="Payments" />
-        </Tabs>
+    <Container maxWidth="xl" sx={{ height: '100%', py: 2, overflow: 'auto' }}>
+      {/* CSS to remove number input arrows */}
+      <style>
+        {`
+          input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          
+          input[type="number"] {
+            -moz-appearance: textfield;
+          }
+        `}
+      </style>
 
-        <TabPanel value={tabIndex} index={0}>
-          <Box component="form" noValidate autoComplete="off">
-            <Grid container spacing={2}>
-              {/* Date */}
-              <Grid item xs={12} sm={3}>
-                <TextField
-                  label="Date"
-                  type="date"
-                  fullWidth
-                  value={salesData.date}
-                  onChange={(e) => handleSalesChange('date', e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+        <TradingIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+        <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
+          Trading Operations
+        </Typography>
+        <Chip 
+          label={`Today: ${new Date().toLocaleDateString()}`} 
+          color="primary" 
+          variant="outlined" 
+        />
+      </Box>
 
-              {/* Party dropdown */}
-              <Grid item xs={12} sm={3}>
-                <Select
-                  fullWidth
-                  value={selectedPartySales}
-                  onChange={(e) => setSelectedPartySales(e.target.value)}
-                  displayEmpty
-                  required
-                >
-                  <MenuItem value="">
-                    <em>Select Party</em>
-                  </MenuItem>
-                  {parties.map((party) => (
-                    <MenuItem key={party.id} value={party.id}>
-                      {party.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Grid>
-<Grid item xs={12} sm={3}>
-                <Select
-                  fullWidth
-                  value={selectedVehicleSales}
-                  onChange={(e) => setSelectedVehicleSales(e.target.value)}
-                  displayEmpty
-                  required
-                  disabled={vehicles.length === 0}
-                >
-                  <MenuItem value="">
-                    <em>Select Vehicle</em>
-                  </MenuItem>
-                  {vehicles.map((vehicle) => (
-                    <MenuItem key={vehicle.id} value={vehicle.id}>
-                      {vehicle.vehicleNo}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Grid>
-              {/* Supplier dropdown */}
-              <Grid item xs={12} sm={3}>
-                <Select
-                  fullWidth
-                  value={selectedSupplierSales}
-                  onChange={(e) => setSelectedSupplierSales(e.target.value)}
-                  displayEmpty
-                  required
-                >
-                  <MenuItem value="">
-                    <em>Select Supplier</em>
-                  </MenuItem>
-                  {suppliers.map((supplier) => (
-                    <MenuItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Grid>
+      {/* Main Content */}
+      <Card elevation={3} sx={{ borderRadius: 2 }}>
+        {/* Navigation Tabs - Only 2 tabs now */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs 
+            value={tabValue} 
+            onChange={handleTabChange}
+            sx={{
+              '& .MuiTab-root': {
+                textTransform: 'none',
+                fontWeight: 500,
+                minWidth: 120
+              }
+            }}
+          >
+            <Tab 
+              label="Sales Entry" 
+              icon={<SalesIcon />}
+              iconPosition="start"
+            />
+            <Tab 
+              label="Payment Entry" 
+              icon={<PaymentIcon />}
+              iconPosition="start"
+            />
+          </Tabs>
+        </Box>
 
-              {/* Birds, Kilograms, Rate */}
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Birds"
-                  type="number"
-                  fullWidth
-                  value={salesData.birds}
-                  onChange={(e) => handleSalesChange('birds', e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Kilograms"
-                  type="number"
-                  fullWidth
-                  value={salesData.kilograms}
-                  onChange={(e) => handleSalesChange('kilograms', e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Rate"
-                  type="number"
-                  fullWidth
-                  value={salesData.rate}
-                  onChange={(e) => handleSalesChange('rate', e.target.value)}
-                />
-              </Grid>
-
-              {/* Calculated Amount */}
-              <Grid item xs={12} sm={4}>
-                <TextField label="Amount" type="number" fullWidth value={salesData.amount} InputProps={{ readOnly: true }} />
-              </Grid>
-
-              {/* Payment */}
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Payment"
-                  type="number"
-                  fullWidth
-                  value={salesData.payment}
-                  onChange={(e) => handleSalesChange('payment', e.target.value)}
-                />
-              </Grid>
-
-              {/* Pending */}
-              <Grid item xs={12} sm={4}>
-                <TextField label="Pending" type="number" fullWidth value={salesData.pending} InputProps={{ readOnly: true }} />
-              </Grid>
-
-              {/* Auto-filled Balance Amount */}
-              <Grid item xs={12} sm={6}>
-                <TextField label="Balance Amount" type="number" fullWidth value={salesData.balanceAmount} InputProps={{ readOnly: true }} />
-              </Grid>
-
-              {/* Description */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Description"
-                  type="text"
-                  fullWidth
-                  value={salesData.description}
-                  onChange={(e) => handleSalesChange('description', e.target.value)}
-                />
-              </Grid>
-
-              {/* Buttons */}
-              <Grid item xs={12} display="flex" justifyContent="flex-end" spacing={1} container>
-                <Grid item>
-                  <Button variant="outlined" onClick={handleCancel}>
-                    Cancel
-                  </Button>
+        {/* Sales Entry Tab */}
+        <TabPanel value={tabValue} index={0}>
+          <Card elevation={2} sx={{ borderRadius: 2 }}>
+            <CardHeader 
+              title="Create Sales Entry"
+              sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
+            />
+            <CardContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Date"
+                    type="date"
+                    value={salesData.date}
+                    onChange={(e) => handleSalesChange('date', e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                  />
                 </Grid>
-                <Grid item>
-                  <Button variant="contained" color="primary" onClick={handleSalesSubmit}>
-                    Submit Sale
-                  </Button>
+                
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Party"
+                    value={salesData.party}
+                    onChange={(e) => handleSalesChange('party', e.target.value)}
+                    size="small"
+                    required
+                  >
+                    <MenuItem value=""><em>Select Party</em></MenuItem>
+                    {parties.map(party => (
+                      <MenuItem key={party.id} value={party.id}>
+                        {party.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Vehicle"
+                    value={salesData.vehicle}
+                    onChange={(e) => handleSalesChange('vehicle', e.target.value)}
+                    disabled={!salesData.party}
+                    size="small"
+                    required
+                  >
+                    <MenuItem value=""><em>Select Vehicle</em></MenuItem>
+                    {vehicles.map(vehicle => (
+                      <MenuItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.vehicleNumber}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Quantity"
+                    type="number"
+                    value={salesData.quantity}
+                    onChange={(e) => handleSalesChange('quantity', e.target.value)}
+                    size="small"
+                    required
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">Kg</InputAdornment>
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Rate per Kg"
+                    type="number"
+                    step="0.01"
+                    value={salesData.rate}
+                    onChange={(e) => handleSalesChange('rate', e.target.value)}
+                    size="small"
+                    required
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">₹</InputAdornment>
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Total Amount"
+                    value={salesData.amount}
+                    size="small"
+                    InputProps={{ 
+                      readOnly: true,
+                      startAdornment: <InputAdornment position="start">₹</InputAdornment>
+                    }}
+                    sx={{ bgcolor: '#f9f9f9' }}
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Description"
+                    multiline
+                    rows={2}
+                    value={salesData.description}
+                    onChange={(e) => handleSalesChange('description', e.target.value)}
+                    size="small"
+                  />
                 </Grid>
               </Grid>
-            </Grid>
-          </Box>
+
+              <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleSalesSubmit}
+                  disabled={loading}
+                  startIcon={<SalesIcon />}
+                >
+                  {loading ? 'Creating...' : 'Create Sales Entry'}
+                </Button>
+                
+                <Button
+                  variant="outlined"
+                  onClick={() => setSalesData({
+                    date: new Date().toISOString().slice(0, 10),
+                    party: '',
+                    vehicle: '',
+                    quantity: '',
+                    rate: '',
+                    amount: '',
+                    description: ''
+                  })}
+                >
+                  Clear
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
         </TabPanel>
 
-        <TabPanel value={tabIndex} index={1}>
-          <Box component="form" noValidate autoComplete="off">
-            <Grid container spacing={2}>
-              {/* Date and Sale Date */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Date"
-                  type="date"
-                  fullWidth
-                  value={paymentData.date}
-                  onChange={(e) => handlePaymentChange('date', e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Sale Date"
-                  type="date"
-                  fullWidth
-                  value={paymentData.saleDate}
-                  onChange={(e) => handlePaymentChange('saleDate', e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-
-              {/* Party dropdown */}
-              <Grid item xs={12} sm={6}>
-                <Select
-                  fullWidth
-                  value={selectedPartyPayment}
-                  onChange={(e) => setSelectedPartyPayment(e.target.value)}
-                  displayEmpty
-                  required
-                >
-                  <MenuItem value="">
-                    <em>Select Party</em>
-                  </MenuItem>
-                  {parties.map((party) => (
-                    <MenuItem key={party.id} value={party.id}>
-                      {party.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Grid>
-
-              {/* Supplier dropdown */}
-              <Grid item xs={12} sm={6}>
-                <Select
-                  fullWidth
-                  value={selectedSupplierPayment}
-                  onChange={(e) => setSelectedSupplierPayment(e.target.value)}
-                  displayEmpty
-                  required
-                >
-                  <MenuItem value="">
-                    <em>Select Supplier</em>
-                  </MenuItem>
-                  {suppliers.map((supplier) => (
-                    <MenuItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Grid>
-
-              {/* Amount Received */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Amount Received"
-                  type="number"
-                  fullWidth
-                  value={paymentData.amountReceived}
-                  onChange={(e) => handlePaymentChange('amountReceived', e.target.value)}
-                />
-              </Grid>
-
-              {/* Transaction ID */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Transaction ID"
-                  fullWidth
-                  value={paymentData.transactionId}
-                  onChange={(e) => handlePaymentChange('transactionId', e.target.value)}
-                />
-              </Grid>
-
-              {/* Notes */}
-              <Grid item xs={12}>
-                <TextField
-                  label="Notes"
-                  fullWidth
-                  multiline
-                  minRows={3}
-                  value={paymentData.notes}
-                  onChange={(e) => handlePaymentChange('notes', e.target.value)}
-                />
-              </Grid>
-
-              {/* Buttons */}
-              <Grid item xs={12} display="flex" justifyContent="flex-end" spacing={1} container>
-                <Grid item>
-                  <Button variant="outlined" onClick={handleCancel}>
-                    Cancel
-                  </Button>
+        {/* Payment Entry Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <Card elevation={2} sx={{ borderRadius: 2 }}>
+            <CardHeader 
+              title="Create Payment Entry"
+              sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
+            />
+            <CardContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Date"
+                    type="date"
+                    value={paymentData.date}
+                    onChange={(e) => handlePaymentChange('date', e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                  />
                 </Grid>
-                <Grid item>
-                  <Button variant="contained" color="primary" onClick={handlePaymentSubmit}>
-                    Submit Payment
-                  </Button>
+                
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Party"
+                    value={paymentData.party}
+                    onChange={(e) => handlePaymentChange('party', e.target.value)}
+                    size="small"
+                    required
+                  >
+                    <MenuItem value=""><em>Select Party</em></MenuItem>
+                    {parties.map(party => (
+                      <MenuItem key={party.id} value={party.id}>
+                        {party.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Payment Amount"
+                    type="number"
+                    step="0.01"
+                    value={paymentData.amount}
+                    onChange={(e) => handlePaymentChange('amount', e.target.value)}
+                    size="small"
+                    required
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">₹</InputAdornment>
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Payment Mode"
+                    value={paymentData.paymentMode}
+                    onChange={(e) => handlePaymentChange('paymentMode', e.target.value)}
+                    size="small"
+                  >
+                    <MenuItem value="cash">Cash</MenuItem>
+                    <MenuItem value="bank">Bank Transfer</MenuItem>
+                    <MenuItem value="cheque">Cheque</MenuItem>
+                    <MenuItem value="online">Online</MenuItem>
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Transaction ID"
+                    value={paymentData.transactionId}
+                    onChange={(e) => handlePaymentChange('transactionId', e.target.value)}
+                    size="small"
+                    helperText="For non-cash payments"
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Description"
+                    multiline
+                    rows={2}
+                    value={paymentData.description}
+                    onChange={(e) => handlePaymentChange('description', e.target.value)}
+                    size="small"
+                  />
                 </Grid>
               </Grid>
-            </Grid>
-          </Box>
+
+              <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handlePaymentSubmit}
+                  disabled={loading}
+                  startIcon={<PaymentIcon />}
+                >
+                  {loading ? 'Processing...' : 'Create Payment Entry'}
+                </Button>
+                
+                <Button
+                  variant="outlined"
+                  onClick={() => setPaymentData({
+                    date: new Date().toISOString().slice(0, 10),
+                    party: '',
+                    amount: '',
+                    paymentMode: 'cash',
+                    transactionId: '',
+                    description: ''
+                  })}
+                >
+                  Clear
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
         </TabPanel>
-      </Paper>
+      </Card>
 
+      {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert severity={snackbar.severity} onClose={handleSnackbarClose}>
+        <Alert 
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
+          severity={snackbar.severity} 
+          sx={{ width: '100%' }}
+          elevation={6}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>
     </Container>
   );
-};
+}
 
 export default TradingPage;

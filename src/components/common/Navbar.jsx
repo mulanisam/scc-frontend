@@ -1,11 +1,52 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  Box,
+  IconButton,
+  Menu,
+  MenuItem,
+  useMediaQuery,
+  useTheme,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemButton,
+  Divider
+} from '@mui/material';
+import {
+  Menu as MenuIcon,
+  Dashboard as DashboardIcon,
+  ShoppingCart as SaleIcon,
+  ShoppingBasket as PurchaseIcon,
+  TrendingUp as TradingIcon,
+  Storage as MasterIcon,
+  Assessment as ReportsIcon,
+  Logout as LogoutIcon,
+  Person as ProfileIcon,
+  Business as CompanyIcon
+} from '@mui/icons-material';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import UserService from '../service/UserService';
+import { getCompanyConfig } from '../../config/companyConfig';
 
 function Navbar() {
-    
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isAdmin, setIsAdmin] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get company configuration
+  const companyConfig = getCompanyConfig();
 
   useEffect(() => {
     const checkAuth = () => {
@@ -14,51 +55,242 @@ function Navbar() {
     };
 
     checkAuth();
-
-    // Add an event listener to update the authentication status on storage change
     window.addEventListener('storage', checkAuth);
-
-    // Cleanup the event listener on component unmount
-    return () => {
-      window.removeEventListener('storage', checkAuth);
-    };
+    return () => window.removeEventListener('storage', checkAuth);
   }, []);
-    //const isAdmin = UserService.isAdmin();
-    useEffect(() => {
-        const handleStorageChange = () => {
-            setIsAuthenticated(UserService.isAuthenticated());
-        };
-        window.addEventListener('storage', handleStorageChange);
 
-        // Clean up event listener on component unmount
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, []);
-    const handleLogout = () => {
-        const confirmLogout = window.confirm('Are you sure you want to logout this user?');
-        if (confirmLogout) {
-            UserService.logout();
-            window.location.href = '/login'; // Redirect to the homepage after logging out
-        }
-    };
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
+  const handleProfileMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
 
+  const handleProfileMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // **FIXED LOGOUT FUNCTION**
+  const handleLogout = () => {
+    const confirmLogout = window.confirm('Are you sure you want to logout?');
+    if (confirmLogout) {
+      // Clear authentication data
+      UserService.logout();
+      localStorage.clear(); // Clear all local storage
+      
+      // Update state immediately
+      setIsAuthenticated(false);
+      setIsAdmin(false);
+      
+      // Dispatch storage event to update other components
+      window.dispatchEvent(new Event('storage'));
+      
+      // Navigate to login page
+      navigate('/login', { replace: true });
+    }
+    handleProfileMenuClose();
+  };
+
+  const navItems = [
+    { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, auth: true },
+    { name: 'Sales', path: '/sale', icon: <SaleIcon />, auth: true },
+    { name: 'Purchase', path: '/purchase', icon: <PurchaseIcon />, auth: true },
+    { name: 'Trading', path: '/trading', icon: <TradingIcon />, auth: true, admin: true },
+    { name: 'Masters', path: '/master-data', icon: <MasterIcon />, auth: true },
+    { name: 'Reports', path: '/reports', icon: <ReportsIcon />, auth: true }
+  ];
+
+  const drawer = (
+    <Box sx={{ width: 280, height: '100%', bgcolor: 'primary.main' }}>
+      <Box sx={{ p: 2, bgcolor: 'primary.dark', display: 'flex', alignItems: 'center', gap: 1 }}>
+        <CompanyIcon sx={{ color: 'white', fontSize: 24 }} />
+        <Typography variant="h6" sx={{ color: 'white', fontWeight: 700 }}>
+          {companyConfig.name}
+        </Typography>
+      </Box>
+      <Divider />
+      <List sx={{ pt: 2 }}>
+        {navItems.map((item) => {
+          if (item.auth && !isAuthenticated) return null;
+          if (item.admin && !isAdmin) return null;
+
+          const isActive = location.pathname === item.path;
+          
+          return (
+            <ListItem key={item.name} disablePadding>
+              <ListItemButton
+                component={Link}
+                to={item.path}
+                onClick={() => setMobileOpen(false)}
+                sx={{
+                  mx: 1,
+                  borderRadius: 2,
+                  mb: 0.5,
+                  bgcolor: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' }
+                }}
+              >
+                <ListItemIcon sx={{ color: 'white', minWidth: 40 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.name} 
+                  sx={{ '& .MuiTypography-root': { color: 'white', fontWeight: 500 } }}
+                />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
+        
+        {isAuthenticated && (
+          <>
+            <Divider sx={{ my: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
+            <ListItem disablePadding>
+              <ListItemButton 
+                onClick={handleLogout} 
+                sx={{ 
+                  mx: 1, 
+                  borderRadius: 2,
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' }
+                }}
+              >
+                <ListItemIcon sx={{ color: 'white', minWidth: 40 }}>
+                  <LogoutIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Logout" 
+                  sx={{ '& .MuiTypography-root': { color: 'white', fontWeight: 500 } }}
+                />
+              </ListItemButton>
+            </ListItem>
+          </>
+        )}
+      </List>
+    </Box>
+  );
+
+  if (!isAuthenticated) {
     return (
-        <nav>
-            <ul>
-                {!isAuthenticated && <li><Link to="/">SOHEL CHICKEN AND EGGS</Link></li>}
-                {isAuthenticated && <li><Link to="/dashboard">Dashboard</Link></li>}
-                {isAuthenticated && <li><Link to="/sale">Sale</Link></li>}
-                {isAuthenticated && <li><Link to="/purchase">Purchase</Link></li>}
-                {isAdmin && isAuthenticated && <li><Link to="/trading">Trading</Link></li>}
-                {isAuthenticated && <li><Link to="/master-data">Masters</Link></li>}
-                {isAuthenticated && <li><Link to="/reports">Reports</Link></li>}
-                {/* {isAdmin && <li><Link to="/admin/user-management">User Management</Link></li>} */}
-                {isAuthenticated && <li><Link to="/" onClick={handleLogout}>Logout</Link></li>}
-            </ul>
-        </nav>
+      <AppBar position="static" elevation={0} sx={{ height: 64 }}>
+        <Toolbar sx={{ height: 64 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CompanyIcon sx={{ fontSize: 28, color: 'white' }} />
+            <Typography 
+              variant="h5" 
+              sx={{ 
+                fontWeight: 700,
+                color: 'white',
+                fontSize: { xs: '1.2rem', md: '1.5rem' },
+                letterSpacing: '0.5px'
+              }}
+            >
+              {isMobile ? companyConfig.shortName : companyConfig.name}
+            </Typography>
+          </Box>
+        </Toolbar>
+      </AppBar>
     );
+  }
+
+  return (
+    <>
+      <AppBar position="static" elevation={2} sx={{ height: 64, zIndex: theme.zIndex.appBar }}>
+        <Toolbar sx={{ height: 64 }}>
+          {isMobile && (
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={handleDrawerToggle}
+              sx={{ mr: 2 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          
+          {/* Company Name - Left Side with Icon */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
+            <CompanyIcon sx={{ fontSize: 28, color: 'white' }} />
+            <Typography 
+              variant="h5" 
+              sx={{ 
+                fontWeight: 700,
+                color: 'white',
+                fontSize: { xs: '1.2rem', md: '1.5rem' },
+                letterSpacing: '0.5px'
+              }}
+            >
+              {isMobile ? companyConfig.shortName : companyConfig.name}
+            </Typography>
+          </Box>
+
+          {!isMobile && (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {navItems.map((item) => {
+                if (item.auth && !isAuthenticated) return null;
+                if (item.admin && !isAdmin) return null;
+
+                const isActive = location.pathname === item.path;
+                
+                return (
+                  <Button
+                    key={item.name}
+                    component={Link}
+                    to={item.path}
+                    color="inherit"
+                    startIcon={item.icon}
+                    sx={{
+                      borderRadius: 2,
+                      px: 2,
+                      bgcolor: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' }
+                    }}
+                  >
+                    {item.name}
+                  </Button>
+                );
+              })}
+            </Box>
+          )}
+
+          <IconButton
+            color="inherit"
+            onClick={handleProfileMenuOpen}
+            sx={{ ml: 1 }}
+          >
+            <ProfileIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleProfileMenuClose}
+      >
+        <MenuItem onClick={handleLogout}>
+          <LogoutIcon sx={{ mr: 1 }} />
+          Logout
+        </MenuItem>
+      </Menu>
+
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          '& .MuiDrawer-paper': { 
+            boxSizing: 'border-box', 
+            width: 280,
+            bgcolor: 'primary.main'
+          }
+        }}
+      >
+        {drawer}
+      </Drawer>
+    </>
+  );
 }
 
 export default Navbar;

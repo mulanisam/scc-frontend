@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_URL } from './../common/axiosConfig.js'
+import { API_BASE_URL } from '../../config/axiosConfig.js'
 
 const getToken = () => localStorage.getItem('token');
 
@@ -14,7 +14,11 @@ export const fetchSuppliers = async () => {
     throw error;
   }
 };
-
+const fetchSupplierById = (supplierId) => {
+  return axios.get(`${API_BASE_URL}/user/suppliers/${supplierId}`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+};
 export const fetchVehicles = async () => {
   try {
     const response = await axios.get(`${API_BASE_URL}/user/vehicles`, {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_URL } from './../common/axiosConfig.js';
+import { API_BASE_URL } from '../../config/axiosConfig.js';
 
 const getToken = () => localStorage.getItem('token');
 

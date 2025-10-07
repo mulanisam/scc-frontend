@@ -1,505 +1,862 @@
-/* eslint-disable react/jsx-no-undef */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-    Container,
-    Grid,
-    TextField,
-    Select,
-    MenuItem,
-    Button,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    Typography,
-    Snackbar,
-    Alert,
-    SliderMark
+  Container,
+  Grid,
+  TextField,
+  MenuItem,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Typography,
+  Snackbar,
+  Alert,
+  FormControlLabel,
+  Checkbox,
+  Box,
+  CircularProgress,
+  InputAdornment,
+  Chip,
+  Card,
+  CardContent,
+  CardHeader,
+  Divider,
+  Switch
 } from '@mui/material';
+import {
+  Search as SearchIcon,
+  Clear as ClearIcon,
+  Save as SaveIcon,
+  RestartAlt as RestartIcon,
+  CalendarToday as DateIcon,
+  Route as RouteIcon,
+  LocalShipping as VehicleIcon,
+  Person as DriverIcon,
+  Sms as SmsIcon,
+  ShoppingCart as SaleIcon,
+  Message as MessageIcon
+} from '@mui/icons-material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getSaleDetailsByCriteria } from '../service/SalesService';
 import UserService from '../service/UserService';
 import { Navigate } from 'react-router-dom';
-import { FormControlLabel, Checkbox } from '@mui/material';
 
+// Constants
+const INITIAL_DATE = () => new Date().toISOString().slice(0, 10);
+const VALIDATION_MESSAGES = {
+  REQUIRED_FIELDS: 'Please fill in all required fields',
+  FETCH_ERROR: 'Error loading data. Please try again.',
+  SUBMIT_SUCCESS: 'Sales entry created successfully',
+  SUBMIT_ERROR: 'Error creating sales entry. Please try again.'
+};
+
+const roundToNearestTen = (amount) => Math.round(amount / 10) * 10;
+
+const createInitialSalesData = (customers) =>
+  customers
+    .filter(customer => !customer.obsolete)
+    .map(customer => ({
+      customerId: customer.id,
+      city: customer.city.name,
+      birds: 0,
+      kilograms: '',
+      rate: '',
+      amount: 0,
+      paymentMode: 'cash',
+      payment: 0,
+      pending: 0,
+      balanceAmount: customer.balanceAmount || 0.0,
+      description: '',
+      obsolete: customer.obsolete
+    }));
+
+const validateFormData = (formData) => {
+  const errors = {};
+  if (!formData.selectedRoute) errors.route = 'Route is required';
+  if (!formData.selectedDriver) errors.driver = 'Driver is required';
+  if (!formData.selectedVehicle) errors.vehicle = 'Vehicle is required';
+  if (!formData.date) errors.date = 'Date is required';
+  if (!formData.totalBirds) errors.totalBirds = 'Total Birds is required';
+  if (!formData.mortality) errors.mortality = 'Mortality is required';
+  if (!formData.returnToFarm) errors.returnToFarm = 'Return to Farm is required';
+  return errors;
+};
 
 const SalesEntry = () => {
-    const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-    const [routes, setRoutes] = useState([]);
-    const [selectedRoute, setSelectedRoute] = useState('');
-    const [drivers, setDrivers] = useState([]);
-    const [selectedDriver, setSelectedDriver] = useState('');
-    const [customers, setCustomers] = useState([]);
-    const [salesData, setSalesData] = useState([]);
-    const [vehicles, setVehicles] = useState([]);
-    const [selectedVehicle, setSelectedVehicle] = useState('');
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-    const [totalBirds, setTotalBirds] = useState('');
-    const [mortality, setMortality] = useState('');
-    const [returnToFarm, setReturnToFarm] = useState('');
-    const [description, setDescription] = useState('');
-    const [sendSms, setSendSms] = useState(true);
-
-
-
-    const isFormValid = selectedRoute && selectedDriver && selectedVehicle && date;
-    useEffect(() => {
-        if (!UserService.isAuthenticated()) {
-            return <Navigate to="/" />;
-        }
-
-        const fetchData = async () => {
-            try {
-                const [routesResponse, driversResponse, vehiclesResponse] = await Promise.all([
-                    getRoutes(),
-                    getDrivers(),
-                    getVehicles()
-                ]);
-                setRoutes(routesResponse.data);
-                setDrivers(driversResponse.data);
-                setVehicles(vehiclesResponse.data);
-            } catch (error) {
-                console.error('Error fetching initial data:', error);
-            }
-        };
-
-        fetchData();
-    }, []);
-
-    useEffect(() => {
-        const fetchCustomers = async () => {
-            if (selectedRoute) {
-                try {
-                    const response = await getCustomersByRoute(selectedRoute);
-                    const initialSalesData = response.data.map(customer => ({
-                        customerId: customer.id,
-                        city:customer.city.name,
-                        birds: 0,
-                        kilograms: '',
-                        rate: '',
-                        amount: 0,
-                        paymentMode: 'cash',
-                        payment: 0,
-                        pending: 0,
-                        balanceAmount: customer.balanceAmount || 0.0,
-                        description: '',
-                        obsolete:customer.obsolete
-                    }));
-                    const filteredInitialSalesData = initialSalesData.filter(customer => !customer.obsolete);
-                    const filteredCustomersData = response.data.filter(customer => !customer.obsolete);
-                    setCustomers(filteredCustomersData);
-                    setSalesData(filteredInitialSalesData);
-                } catch (error) {
-                    console.error('Error fetching customers:', error);
-                }
-            }
-        };
-
-        fetchCustomers();
-    }, [selectedRoute]);
-
-    useEffect(() => {
-        const fetchSaleDetails = async () => {
-            if (isFormValid) {
-                try {
-                    const response = await getSaleDetailsByCriteria(date, selectedRoute, selectedVehicle, selectedDriver);
-                    if (response.data) {
-                        const details = response.data;
-                        setTotalBirds(details.totalBirds || '');
-                        setMortality(details.mortality || '');
-                        setReturnToFarm(details.returnToFarm || '');
-                        setDescription(details.description || '');
-                        //setSalesData(details.salesDetails || []);
-                    }
-                } catch (error) {
-                    console.error('Error fetching sale details:', error);
-                }
-            }
-        };
-
-        fetchSaleDetails();
-    }, [date, selectedRoute, selectedVehicle, selectedDriver, isFormValid]);
-
-    const roundToNearestTen = (amount) => {
-        return Math.round(amount / 10) * 10;
-      };
-    const handleSalesDataChange = useCallback((index, field, value) => {
-        setSalesData(prevSalesData => {
-            const newData = [...prevSalesData];
-            newData[index] = {
-                ...newData[index],
-                [field]: value,
-            };
-            if (field === 'rate' || field === 'kilograms') {
-                newData[index].amount = roundToNearestTen(newData[index].rate * newData[index].kilograms);
-            }
-            newData[index].pending = roundToNearestTen(newData[index].amount - newData[index].payment);
-            return newData;
-        });
-    }, []);
-
-    const handleSubmit = async () => {
-        if (!selectedRoute || !selectedDriver || !selectedVehicle) {
-            setSnackbarMessage('Route, Driver, and Vehicle are mandatory fields.');
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        const completedSalesData = salesData.filter(customerData =>
-            customerData.birds !== '' &&
-            customerData.kilograms !== '' &&
-            customerData.rate !== ''
-        );
-        const totals = calculateTotals();
-        console.log();
-        const salesEntry = {
-            date,
-            route: selectedRoute,
-            driver: selectedDriver,
-            vehicleNo: selectedVehicle,
-            salesDetails: completedSalesData,
-
-            totalBirds: Number(totalBirds),
-            mortality: Number(mortality),
-            returnToFarm: Number(returnToFarm),
-            description,
-            totalBirdSale: totals.birds,
-            totalKilogramSale: totals.kilograms,
-            totalAmount: totals.amount,
-            totalPaymentReceived: totals.payment,
-            totalPending: totals.pending,
-            sendSms:sendSms
-        };
-        
-
-        try {
-            console.log("salesEntry: ",salesEntry);
-            await createSalesEntry(salesEntry);
-            setSnackbarMessage('Sales entry created successfully');
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-            handleClear(); // Clear form on success
-        } catch (error) {
-            setSnackbarMessage('Error creating sales entry');
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        }
-    };
-
-    const handleCloseSnackbar = (event, reason) => {
-        if (reason === 'clickaway') {
-            return;
-        }
-        setSnackbarOpen(false);
-    };
-
-    const handleClear = () => {
-        setSelectedRoute('');
-        setSelectedDriver('');
-        setSelectedVehicle('');
-        setTotalBirds('');
-        setMortality('');
-        setReturnToFarm('');
-        setDescription('');
-        setSalesData([]);
-    };
-
-    const calculateTotals = () => {
-        return salesData.reduce(
-            (totals, data) => {
-                totals.birds += Number(data.birds || 0);
-                totals.kilograms += Number(data.kilograms || 0);
-                totals.rate += Number(data.rate || 0);
-                totals.amount += Number(data.amount || 0);
-                totals.payment += Number(data.payment || 0);
-                totals.pending += Number(data.pending || 0);
-                return totals;
-            },
-            {
-                birds: 0,
-                kilograms: 0,
-                rate: 0,
-                amount: 0,
-                payment: 0,
-                pending: 0,
-            }
-        );
-    };
-
-    return (
-        <Container maxWidth={false}>
-            <Paper elevation={3} style={{ padding: '16px', marginBottom: '16px' , width: '100%'}}>
-             {/* <Typography variant="h4" gutterBottom>Sales Entry</Typography> */}
-             <Grid container spacing={1}>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <TextField
-      label="Date"
-      type="date"
-      fullWidth
-      InputLabelProps={{ shrink: true }}
-      value={date}
-      onChange={(e) => setDate(e.target.value)}
-      InputProps={{ sx: { height: 40 } }}
-    />
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <Select
-      fullWidth
-      value={selectedRoute}
-      onChange={(e) => setSelectedRoute(e.target.value)}
-      displayEmpty
-      required
-      sx={{ height: 40 }}
-      MenuProps={{ PaperProps: { sx: { maxHeight: 200 } } }}
-    >
-      <MenuItem value=""><em>Select Route</em></MenuItem>
-      {routes.map(route => (
-        <MenuItem key={route.id} value={route.id}>{route.name}</MenuItem>
-      ))}
-    </Select>
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <Select
-      fullWidth
-      value={selectedVehicle}
-      onChange={(e) => setSelectedVehicle(e.target.value)}
-      displayEmpty
-      required
-      sx={{ height: 40 }}
-    >
-      <MenuItem value=""><em>Select Vehicle</em></MenuItem>
-      {vehicles.map(vehicle => (
-        <MenuItem key={vehicle.id} value={vehicle.id}>{vehicle.vehicleNo}</MenuItem>
-      ))}
-    </Select>
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <Select
-      fullWidth
-      value={selectedDriver}
-      onChange={(e) => setSelectedDriver(e.target.value)}
-      displayEmpty
-      required
-      sx={{ height: 40 }}
-    >
-      <MenuItem value=""><em>Select Driver</em></MenuItem>
-      {drivers.map(driver => (
-        <MenuItem key={driver.id} value={driver.id}>{driver.name}</MenuItem>
-      ))}
-    </Select>
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <TextField
-      label="Total Birds"
-      type="number"
-      fullWidth
-      value={totalBirds}
-      onChange={(e) => setTotalBirds(e.target.value)}
-      required
-      InputProps={{ sx: { height: 40 } }}
-    />
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <TextField
-      label="Mortality"
-      type="number"
-      fullWidth
-      value={mortality}
-      onChange={(e) => setMortality(e.target.value)}
-      required
-      InputProps={{ sx: { height: 40 } }}
-    />
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <TextField
-      label="Return to Farm"
-      type="number"
-      fullWidth
-      value={returnToFarm}
-      onChange={(e) => setReturnToFarm(e.target.value)}
-      required
-      InputProps={{ sx: { height: 40 } }}
-    />
-  </Grid>
-  <Grid item xs={12} md={1.5} sx={{ height: 40 }}>
-    <TextField
-      label="Description"
-      type="text"
-      fullWidth
-      value={description}
-      onChange={(e) => setDescription(e.target.value)}
-      InputProps={{ sx: { height: 42 } }}
-    />
-  </Grid>
-</Grid>
-
+  const isAuthenticated = UserService.isAuthenticated();
   
+  const [formData, setFormData] = useState({
+    date: INITIAL_DATE(),
+    selectedRoute: '',
+    selectedDriver: '',
+    selectedVehicle: '',
+    totalBirds: '',
+    mortality: '',
+    returnToFarm: '',
+    description: '',
+    sendSms: true
+  });
 
-        </Paper>
-    <Paper elevation={3} style={{ padding: '16px', marginTop: '16px' , width: '100%'}}>
-            {/* <Typography variant="h5" gutterBottom style={{ marginTop: '5px' }}>Customers</Typography> */}
-            <TableContainer component={Paper} style={{ width: '100%', maxHeight: '60vh' }}>
-                <Table stickyHeader style={{ tableLayout: 'fixed', width: '100%' }}  sx={{ '& td, & th': { py: 0.5, px: 1 } }}>
+  const [masterData, setMasterData] = useState({
+    routes: [],
+    drivers: [],
+    vehicles: [],
+    customers: []
+  });
+
+  const [salesData, setSalesData] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [uiState, setUiState] = useState({
+    loading: false,
+    submitting: false,
+    errors: {}
+  });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
+  const isFormValid = useMemo(() => {
+    const errors = validateFormData(formData);
+    return Object.keys(errors).length === 0;
+  }, [formData]);
+
+  const filteredCustomersWithSales = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return masterData.customers.map((customer, index) => ({
+        customer,
+        salesIndex: index,
+        salesData: salesData[index]
+      }));
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    return masterData.customers
+      .map((customer, index) => ({
+        customer,
+        salesIndex: index,
+        salesData: salesData[index],
+        matches: customer.name.toLowerCase().includes(query) ||
+                customer.city.name.toLowerCase().includes(query)
+      }))
+      .sort((a, b) => {
+        if (a.matches && !b.matches) return -1;
+        if (!a.matches && b.matches) return 1;
+        return 0;
+      });
+  }, [masterData.customers, salesData, searchQuery]);
+
+  const totals = useMemo(() =>
+    salesData.reduce((acc, data) => ({
+      birds: acc.birds + Number(data.birds || 0),
+      kilograms: acc.kilograms + Number(data.kilograms || 0),
+      rate: acc.rate + Number(data.rate || 0),
+      amount: acc.amount + Number(data.amount || 0),
+      payment: acc.payment + Number(data.payment || 0),
+      pending: acc.pending + Number(data.pending || 0)
+    }), { birds: 0, kilograms: 0, rate: 0, amount: 0, payment: 0, pending: 0 }),
+    [salesData]
+  );
+
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  const handleCloseSnackbar = useCallback((event, reason) => {
+    if (reason === 'clickaway') return;
+    setSnackbar(prev => ({ ...prev, open: false }));
+  }, []);
+
+  const handleFormChange = useCallback((field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setUiState(prev => ({
+      ...prev,
+      errors: { ...prev.errors, [field]: null }
+    }));
+  }, []);
+
+  const handleSalesDataChange = useCallback((index, field, value) => {
+    setSalesData(prevSalesData => {
+      try {
+        const newData = [...prevSalesData];
+        newData[index] = { ...newData[index], [field]: value };
+        
+        if (field === 'rate' || field === 'kilograms') {
+          const rate = Number(newData[index].rate) || 0;
+          const kilograms = Number(newData[index].kilograms) || 0;
+          newData[index].amount = roundToNearestTen(rate * kilograms);
+        }
+        
+        if (field === 'payment' || field === 'amount') {
+          const amount = Number(newData[index].amount) || 0;
+          const payment = Number(newData[index].payment) || 0;
+          newData[index].pending = roundToNearestTen(amount - payment);
+        }
+        
+        return newData;
+      } catch (error) {
+        console.error('Error updating sales data:', error);
+        return prevSalesData;
+      }
+    });
+  }, []);
+
+  // Load initial data
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const fetchInitialData = async () => {
+      setUiState(prev => ({ ...prev, loading: true }));
+      try {
+        const [routesResponse, driversResponse, vehiclesResponse] = await Promise.all([
+          getRoutes(),
+          getDrivers(),
+          getVehicles()
+        ]);
+
+        setMasterData(prev => ({
+          ...prev,
+          routes: routesResponse.data || [],
+          drivers: driversResponse.data || [],
+          vehicles: vehiclesResponse.data || []
+        }));
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+        showSnackbar(VALIDATION_MESSAGES.FETCH_ERROR, 'error');
+      } finally {
+        setUiState(prev => ({ ...prev, loading: false }));
+      }
+    };
+
+    fetchInitialData();
+  }, [isAuthenticated, showSnackbar]);
+
+  // Load customers when route changes
+  useEffect(() => {
+    if (!isAuthenticated || !formData.selectedRoute) return;
+
+    const fetchCustomers = async () => {
+      try {
+        const response = await getCustomersByRoute(formData.selectedRoute);
+        const filteredCustomers = (response.data || []).filter(customer => !customer.obsolete);
+        setMasterData(prev => ({ ...prev, customers: filteredCustomers }));
+        setSalesData(createInitialSalesData(response.data || []));
+        setSearchQuery('');
+      } catch (error) {
+        console.error('Error fetching customers:', error);
+        showSnackbar('Error loading customers', 'error');
+        setMasterData(prev => ({ ...prev, customers: [] }));
+        setSalesData([]);
+      }
+    };
+
+    fetchCustomers();
+  }, [formData.selectedRoute, isAuthenticated, showSnackbar]);
+
+  const handleSubmit = async () => {
+    const errors = validateFormData(formData);
+    if (Object.keys(errors).length > 0) {
+      setUiState(prev => ({ ...prev, errors }));
+      showSnackbar(VALIDATION_MESSAGES.REQUIRED_FIELDS, 'error');
+      return;
+    }
+
+    const completedSalesData = salesData.filter(customerData =>
+      customerData.birds !== '' &&
+      customerData.kilograms !== '' &&
+      customerData.rate !== ''
+    );
+
+    if (completedSalesData.length === 0) {
+      showSnackbar('Please add at least one sale entry', 'error');
+      return;
+    }
+
+    const salesEntry = {
+      date: formData.date,
+      route: formData.selectedRoute,
+      driver: formData.selectedDriver,
+      vehicleNo: formData.selectedVehicle,
+      salesDetails: completedSalesData,
+      totalBirds: Number(formData.totalBirds),
+      mortality: Number(formData.mortality),
+      returnToFarm: Number(formData.returnToFarm),
+      description: formData.description,
+      totalBirdSale: totals.birds,
+      totalKilogramSale: totals.kilograms,
+      totalAmount: totals.amount,
+      totalPaymentReceived: totals.payment,
+      totalPending: totals.pending,
+      sendSms: formData.sendSms
+    };
+
+    setUiState(prev => ({ ...prev, submitting: true }));
+    try {
+      await createSalesEntry(salesEntry);
+      showSnackbar(VALIDATION_MESSAGES.SUBMIT_SUCCESS);
+      handleClear();
+    } catch (error) {
+      console.error('Error creating sales entry:', error);
+      showSnackbar(VALIDATION_MESSAGES.SUBMIT_ERROR, 'error');
+    } finally {
+      setUiState(prev => ({ ...prev, submitting: false }));
+    }
+  };
+
+  const handleClear = useCallback(() => {
+    setFormData({
+      date: INITIAL_DATE(),
+      selectedRoute: '',
+      selectedDriver: '',
+      selectedVehicle: '',
+      totalBirds: '',
+      mortality: '',
+      returnToFarm: '',
+      description: '',
+      sendSms: true
+    });
+    setSalesData([]);
+    setSearchQuery('');
+    setMasterData(prev => ({ ...prev, customers: [] }));
+    setUiState(prev => ({ ...prev, errors: {} }));
+  }, []);
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (uiState.loading) {
+    return (
+      <Box sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ ml: 2 }}>Loading...</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* CSS to remove number input arrows */}
+      <style>
+        {`
+          input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          
+          input[type="number"] {
+            -moz-appearance: textfield;
+          }
+        `}
+      </style>
+
+      {/* Fixed Header Section */}
+      <Box sx={{ flexShrink: 0 }}>
+        <Container maxWidth="xl" sx={{ py: 2 }}>
+         
+          {/* Form Section - Fixed */}
+          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
+            <CardHeader 
+              title="Sales Information" 
+              sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
+            />
+            <CardContent sx={{ py: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => handleFormChange('date', e.target.value)}
+                    required
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <DateIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Route"
+                    value={formData.selectedRoute}
+                    onChange={(e) => handleFormChange('selectedRoute', e.target.value)}
+                    required
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <RouteIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Route</em></MenuItem>
+                    {masterData.routes.map(route => (
+                      <MenuItem key={route.id} value={route.id}>
+                        {route.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Vehicle"
+                    value={formData.selectedVehicle}
+                    onChange={(e) => handleFormChange('selectedVehicle', e.target.value)}
+                    required
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <VehicleIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Vehicle</em></MenuItem>
+                    {masterData.vehicles.map(vehicle => (
+                      <MenuItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.vehicleNo}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Driver"
+                    value={formData.selectedDriver}
+                    onChange={(e) => handleFormChange('selectedDriver', e.target.value)}
+                    required
+                    size="small"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <DriverIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Driver</em></MenuItem>
+                    {masterData.drivers.map(driver => (
+                      <MenuItem key={driver.id} value={driver.id}>
+                        {driver.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Total Birds"
+                    type="number"
+                    value={formData.totalBirds}
+                    onChange={(e) => handleFormChange('totalBirds', e.target.value)}
+                    required
+                    size="small"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Mortality"
+                    type="number"
+                    value={formData.mortality}
+                    onChange={(e) => handleFormChange('mortality', e.target.value)}
+                    required
+                    size="small"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Return to Farm"
+                    type="number"
+                    value={formData.returnToFarm}
+                    onChange={(e) => handleFormChange('returnToFarm', e.target.value)}
+                    required
+                    size="small"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Description"
+                    value={formData.description}
+                    onChange={(e) => handleFormChange('description', e.target.value)}
+                    size="small"
+                    placeholder="Enter description..."
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Container>
+      </Box>
+
+      {/* Scrollable Customer Sales Details Section */}
+      {formData.selectedRoute && (
+        <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Container maxWidth="xl" sx={{ height: '100%', pb: 1 }}>
+            <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+              <CardHeader 
+                title="Customer Sales Details" 
+                sx={{ 
+                  bgcolor: 'secondary.main', 
+                  color: 'white',
+                  py: 1,
+                  flexShrink: 0,
+                  '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+                }}
+              />
+              
+              {/* Search Box - Fixed */}
+              <Box sx={{ p: 2, bgcolor: '#f8f9fa', flexShrink: 0 }}>
+                <TextField
+                  fullWidth
+                  placeholder="Search customers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  size="small"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon color="primary" />
+                      </InputAdornment>
+                    ),
+                    endAdornment: searchQuery && (
+                      <InputAdornment position="end">
+                        <Button 
+                          size="small" 
+                          onClick={() => setSearchQuery('')}
+                          startIcon={<ClearIcon />}
+                        >
+                          Clear
+                        </Button>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+              </Box>
+
+              {/* Scrollable Table with Fixed Totals */}
+              <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Data Rows - Scrollable */}
+                <TableContainer sx={{ flexGrow: 1, overflow: 'auto' }}>
+                  <Table stickyHeader size="small">
                     <TableHead>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>City</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Birds</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Kilograms</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Rate</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Amount</TableCell>
-                            {/* <TableCell>Payment Mode</TableCell> */}
-                            <TableCell sx={{ fontWeight: 'bold' }}>Payment</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Pending</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Balance Amount</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
-                        </TableRow>
+                      <TableRow>
+                        {['Customer', 'City', 'Birds', 'Kilograms', 'Rate', 'Amount', 'Payment', 'Pending', 'Balance', 'Description'].map(header => (
+                          <TableCell 
+                            key={header} 
+                            sx={{ 
+                              fontWeight: 'bold', 
+                              bgcolor: '#f5f5f5',
+                              whiteSpace: 'nowrap',
+                              py: 1,
+                              fontSize: '0.85rem'
+                            }}
+                          >
+                            {header}
+                          </TableCell>
+                        ))}
+                      </TableRow>
                     </TableHead>
                     <TableBody>
-                        {customers.map((customer, index) => (
-                            <TableRow key={customer.id} >
-                                <TableCell >{customer.name}</TableCell>
-                                <TableCell >{customer.city.name}</TableCell>
-                                <TableCell>
-                                    <TextField
-                                        type="number"
-                                        fullWidth
-                                        value={salesData[index]?.birds || 0}
-                                        onChange={(e) => handleSalesDataChange(index, 'birds', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <TextField
-                                        type="number"
-                                        fullWidth
-                                        value={salesData[index]?.kilograms || ''}
-                                        onChange={(e) => handleSalesDataChange(index, 'kilograms', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <TextField
-                                        type="number"
-                                        fullWidth
-                                        value={salesData[index]?.rate || ''}
-                                        onChange={(e) => handleSalesDataChange(index, 'rate', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>{salesData[index]?.amount || 0}</TableCell>
-                                {/* <TableCell>{salesData[index]?.paymentMode || 'cash'}</TableCell> */}
-                                <TableCell>
-                                    <TextField
-                                        type="number"
-                                        fullWidth
-                                        value={salesData[index]?.payment || 0}
-                                        onChange={(e) => handleSalesDataChange(index, 'payment', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>{salesData[index]?.pending || 0}</TableCell>
-                                <TableCell>{salesData[index]?.balanceAmount || 0}</TableCell>
-                                <TableCell>
-                                    <TextField
-                                        fullWidth
-                                        value={salesData[index]?.description || ''}
-                                        onChange={(e) => handleSalesDataChange(index, 'description', e.target.value)}
-                                    />
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                         <TableRow sx={{
-                                        position: "sticky",
-                                        bottom: 0,
-                                        background: "#fff",
-                                        zIndex: 2
-                                    }}>
-                <TableCell><strong>Total</strong></TableCell>
-                <TableCell></TableCell>
-                <TableCell><strong>{calculateTotals().birds}</strong></TableCell>
-                <TableCell><strong>{calculateTotals().kilograms}</strong></TableCell>
-                <TableCell></TableCell> {/* Optional: If you need a total for rate */}
-                <TableCell><strong>{calculateTotals().amount}</strong></TableCell>
-                <TableCell><strong>{calculateTotals().payment}</strong></TableCell>
-                <TableCell><strong>{calculateTotals().pending}</strong></TableCell>
-                <TableCell></TableCell> {/* Optional: If you need a total for balance */}
-                <TableCell></TableCell> {/* Optional: If you need a total for description */}
-            </TableRow>
+                      {filteredCustomersWithSales.map(({ customer, salesIndex, salesData: customerSalesData, matches }) => (
+                        <TableRow 
+                          key={customer.id} 
+                          hover
+                          sx={{ 
+                            bgcolor: matches === false ? 'rgba(0,0,0,0.05)' : 'inherit',
+                            '& td': { py: 0.5 }
+                          }}
+                        >
+                          <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>{customer.name}</TableCell>
+                          <TableCell sx={{ fontSize: '0.85rem' }}>{customer.city.name}</TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={customerSalesData?.birds || ''}
+                              onChange={(e) => handleSalesDataChange(salesIndex, 'birds', e.target.value)}
+                              sx={{ width: 70 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              step="0.1"
+                              value={customerSalesData?.kilograms || ''}
+                              onChange={(e) => handleSalesDataChange(salesIndex, 'kilograms', e.target.value)}
+                              sx={{ width: 70 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              step="0.1"
+                              value={customerSalesData?.rate || ''}
+                              onChange={(e) => handleSalesDataChange(salesIndex, 'rate', e.target.value)}
+                              sx={{ width: 70 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
+                            ₹{customerSalesData?.amount || 0}
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={customerSalesData?.payment || ''}
+                              onChange={(e) => handleSalesDataChange(salesIndex, 'payment', e.target.value)}
+                              sx={{ width: 70 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
+                            ₹{customerSalesData?.pending || 0}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: '0.85rem' }}>
+                            ₹{customerSalesData?.balanceAmount || 0}
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              value={customerSalesData?.description || ''}
+                              onChange={(e) => handleSalesDataChange(salesIndex, 'description', e.target.value)}
+                              sx={{ width: 100 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
-                </Table>
-            </TableContainer>
-            <Grid container spacing={2} style={{ marginTop: '20px', width: 'auto' }}>
-            <Grid item>
-                <Button
-                variant="contained"
-                color="primary"
-                onClick={handleSubmit}
-                disabled={!isFormValid}
-                size="small"
-                >
-                Submit
-                </Button>
-            </Grid>
-            <Grid item>
-                <Button
-                variant="contained"
-                color="secondary"
-                onClick={handleClear}
-                size="small"
-                >
-                Clear
-                </Button>
-            </Grid>
-            <Grid item>
-              
-                <FormControlLabel
-                    control={
-                    <Checkbox
-                        checked={sendSms}
-                        onChange={(e) => setSendSms(e.target.checked)}
-                        color="success"
-                    />
-                    }
-                    label="Send SMS"
-                    size="small"
-                />
-            </Grid>
+                  </Table>
+                </TableContainer>
 
-            </Grid>
+                {/* Fixed Totals Row */}
+                <Box sx={{ 
+                  borderTop: '2px solid #e0e0e0', 
+                  bgcolor: 'primary.main',
+                  flexShrink: 0 
+                }}>
+                  <Table size="small">
+                    <TableBody>
+                      <TableRow>
+                        <TableCell colSpan={2} sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'white', 
+                          py: 1,
+                          bgcolor: 'primary.main',
+                          border: 'none'
+                        }}>
+                          TOTALS
+                        </TableCell>
+                        <TableCell sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'white',
+                          bgcolor: 'primary.main',
+                          border: 'none',
+                          width: 70
+                        }}>
+                          {totals.birds}
+                        </TableCell>
+                        <TableCell sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'white',
+                          bgcolor: 'primary.main',
+                          border: 'none',
+                          width: 70
+                        }}>
+                          {totals.kilograms.toFixed(1)}
+                        </TableCell>
+                        <TableCell sx={{ bgcolor: 'primary.main', border: 'none', width: 70 }}></TableCell>
+                        <TableCell sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'white',
+                          bgcolor: 'primary.main',
+                          border: 'none'
+                        }}>
+                          ₹{totals.amount}
+                        </TableCell>
+                        <TableCell sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'white',
+                          bgcolor: 'primary.main',
+                          border: 'none',
+                          width: 70
+                        }}>
+                          ₹{totals.payment}
+                        </TableCell>
+                        <TableCell sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'white',
+                          bgcolor: 'primary.main',
+                          border: 'none'
+                        }}>
+                          ₹{totals.pending}
+                        </TableCell>
+                        <TableCell colSpan={2} sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </Box>
+              </Box>
+            </Card>
+          </Container>
+        </Box>
+      )}
 
-            </Paper>
-            
-            {/* <Grid container spacing={6} style={{ marginTop: '20px' }}>
-                <Grid container spacing={2}>
-                    <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!isFormValid}>
-                        Submit
-                    </Button>
-                </Grid>
-               <Grid container spacing={2}>
-                    <Button variant="contained" color="secondary" onClick={handleClear}>
-                        Clear
-                    </Button>
-                </Grid>
-            </Grid> */}
-
-            <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={300}
-                onClose={handleCloseSnackbar}
+      {/* Fixed Action Buttons */}
+      <Box sx={{ flexShrink: 0, borderTop: '1px solid #e0e0e0', bgcolor: 'white' }}>
+        <Container maxWidth="xl">
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            gap: 3, 
+            justifyContent: 'center',
+            py: 2
+          }}>
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              startIcon={uiState.submitting ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+              onClick={handleSubmit}
+              disabled={uiState.submitting || !isFormValid}
+              sx={{ minWidth: 150 }}
             >
-                <Alert
-                    onClose={handleCloseSnackbar}
-                    severity={snackbarSeverity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbarMessage}
-                </Alert>
-            </Snackbar>
-           
+              {uiState.submitting ? 'Submitting...' : 'Submit Sales'}
+            </Button>
+            
+            <Button
+              variant="outlined"
+              color="secondary"
+              size="large"
+              startIcon={<RestartIcon />}
+              onClick={handleClear}
+              disabled={uiState.submitting}
+              sx={{ minWidth: 120 }}
+            >
+              Clear Form
+            </Button>
+
+           {/* Enhanced SMS Toggle - No background color when on */}
+<Box sx={{ 
+  display: 'flex', 
+  alignItems: 'center',
+  gap: 1,
+  border: '2px solid',
+  borderColor: formData.sendSms ? 'primary.main' : 'grey.300',
+  borderRadius: 2,
+  px: 2,
+  py: 1,
+  bgcolor: 'white', // Always white background
+  transition: 'all 0.3s ease',
+  '&:hover': {
+    borderColor: 'primary.main',
+    bgcolor: 'white', // Keep white on hover too
+    boxShadow: formData.sendSms ? '0 2px 8px rgba(21, 101, 192, 0.2)' : '0 1px 4px rgba(0,0,0,0.1)'
+  }
+}}>
+  <MessageIcon 
+    color={formData.sendSms ? 'primary' : 'disabled'} 
+    sx={{ fontSize: 24 }}
+  />
+  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+    <Typography 
+      variant="body2" 
+      sx={{ 
+        fontWeight: 600,
+        color: formData.sendSms ? 'primary.main' : 'text.secondary'
+      }}
+    >
+      SMS Notification
+    </Typography>
+    <Typography 
+      variant="caption" 
+      sx={{ 
+        color: formData.sendSms ? 'primary.dark' : 'text.disabled',
+        lineHeight: 1
+      }}
+    >
+      {formData.sendSms ? 'Send to customers' : 'Not sending'}
+    </Typography>
+  </Box>
+  <Switch
+    checked={formData.sendSms}
+    onChange={(e) => handleFormChange('sendSms', e.target.checked)}
+    color="primary"
+    size="medium"
+  />
+</Box>
+
+          </Box>
         </Container>
-    );
+      </Box>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbar.severity} 
+          sx={{ width: '100%' }}
+          elevation={6}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
 };
 
 export default SalesEntry;
