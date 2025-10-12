@@ -22,7 +22,10 @@ import {
 import {
   TrendingUp as TradingIcon,
   ShoppingCart as SalesIcon,
-  Payment as PaymentIcon
+  Payment as PaymentIcon,
+   LocalShipping as VehicleIcon,
+   Person as PartyIcon,
+  Business as SupplierIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -32,6 +35,7 @@ import {
   createPaymentEntry, 
   getVehiclesByParty 
 } from '../service/TradingService';
+
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -52,6 +56,7 @@ function TabPanel(props) {
   );
 }
 
+
 function TradingPage() {
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
@@ -67,22 +72,25 @@ function TradingPage() {
     severity: 'success'
   });
 
-  // Sales Entry State
+  // Sales Entry State - Updated with separate birds and kilograms
   const [salesData, setSalesData] = useState({
     date: new Date().toISOString().slice(0, 10),
-    party: '',
-    vehicle: '',
-    quantity: '',
+    partyId: '',
+    partyVehicleId: '',
+    supplierId: '',    // new
+    birds: '',
+    kilograms: '',
     rate: '',
     amount: '',
+    payment: '',       // new
     description: ''
   });
 
-  // Payment Entry State
+  // Payment Entry State - Updated field names
   const [paymentData, setPaymentData] = useState({
     date: new Date().toISOString().slice(0, 10),
-    party: '',
-    amount: '',
+    partyId: '',
+    payment: '',
     paymentMode: 'cash',
     transactionId: '',
     description: ''
@@ -116,45 +124,59 @@ function TradingPage() {
     setTabValue(newValue);
   };
 
-  // Sales Entry Handlers
+  // Sales Entry Handlers - Updated
   const handleSalesChange = async (field, value) => {
     setSalesData(prev => ({ ...prev, [field]: value }));
     
-    if (field === 'party' && value) {
+    if (field === 'partyId' && value) {
       try {
         const vehiclesRes = await getVehiclesByParty(value);
         setVehicles(vehiclesRes.data || []);
+        // Reset vehicle selection when party changes
+        setSalesData(prev => ({ ...prev, partyVehicleId: '' }));
       } catch (error) {
         showSnackbar('Error loading vehicles', 'error');
       }
     }
 
-    if ((field === 'quantity' || field === 'rate') && salesData.quantity && salesData.rate) {
-      const quantity = field === 'quantity' ? parseFloat(value) : parseFloat(salesData.quantity);
+    // Calculate amount when kilograms or rate changes
+    if ((field === 'kilograms' || field === 'rate')) {
+      const weight = field === 'kilograms' ? parseFloat(value) : parseFloat(salesData.kilograms);
       const rate = field === 'rate' ? parseFloat(value) : parseFloat(salesData.rate);
-      setSalesData(prev => ({ ...prev, amount: (quantity * rate).toFixed(2) }));
+      if (weight && rate && !isNaN(weight) && !isNaN(rate)) {
+        setSalesData(prev => ({ ...prev, amount: (weight * rate).toFixed(2) }));
+      }
     }
   };
 
   const handleSalesSubmit = async () => {
-    if (!salesData.party || !salesData.vehicle || !salesData.quantity || !salesData.rate) {
+    if (!salesData.partyId || !salesData.partyVehicleId || !salesData.birds || !salesData.kilograms || !salesData.rate || !salesData.supplierId ) {
       showSnackbar('Please fill all required fields', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      await createSalesEntry(salesData);
+      const submitData = {
+        ...salesData,
+        amount: parseInt(salesData.amount), // Convert to integer if needed
+        payment: salesData.payment ? parseInt(salesData.payment) : 0
+      };
+      await createSalesEntry(submitData);
       showSnackbar('Sales entry created successfully');
       setSalesData({
         date: new Date().toISOString().slice(0, 10),
-        party: '',
-        vehicle: '',
-        quantity: '',
+        partyId: '',
+        partyVehicleId: '',
+        supplierId: '',    // reset supplier
+        birds: '',
+        kilograms: '',
         rate: '',
         amount: '',
+        payment: '',       // reset payment
         description: ''
       });
+      setVehicles([]); // Clear vehicles
     } catch (error) {
       showSnackbar('Error creating sales entry', 'error');
     } finally {
@@ -162,25 +184,29 @@ function TradingPage() {
     }
   };
 
-  // Payment Entry Handlers
+  // Payment Entry Handlers - Updated
   const handlePaymentChange = (field, value) => {
     setPaymentData(prev => ({ ...prev, [field]: value }));
   };
 
   const handlePaymentSubmit = async () => {
-    if (!paymentData.party || !paymentData.amount) {
+    if (!paymentData.partyId || !paymentData.payment) {
       showSnackbar('Please fill all required fields', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      await createPaymentEntry(paymentData);
+      const submitData = {
+        ...paymentData,
+        payment: parseInt(paymentData.payment) // Convert to integer
+      };
+      await createPaymentEntry(submitData);
       showSnackbar('Payment entry created successfully');
       setPaymentData({
         date: new Date().toISOString().slice(0, 10),
-        party: '',
-        amount: '',
+        partyId: '',
+        payment: '',
         paymentMode: 'cash',
         transactionId: '',
         description: ''
@@ -224,7 +250,7 @@ function TradingPage() {
 
       {/* Main Content */}
       <Card elevation={3} sx={{ borderRadius: 2 }}>
-        {/* Navigation Tabs - Only 2 tabs now */}
+        {/* Navigation Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs 
             value={tabValue} 
@@ -281,10 +307,17 @@ function TradingPage() {
                     select
                     fullWidth
                     label="Party"
-                    value={salesData.party}
-                    onChange={(e) => handleSalesChange('party', e.target.value)}
+                    value={salesData.partyId}
+                    onChange={(e) => handleSalesChange('partyId', e.target.value)}
                     size="small"
                     required
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <PartyIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
                   >
                     <MenuItem value=""><em>Select Party</em></MenuItem>
                     {parties.map(party => (
@@ -300,11 +333,18 @@ function TradingPage() {
                     select
                     fullWidth
                     label="Vehicle"
-                    value={salesData.vehicle}
-                    onChange={(e) => handleSalesChange('vehicle', e.target.value)}
-                    disabled={!salesData.party}
+                    value={salesData.partyVehicleId}
+                    onChange={(e) => handleSalesChange('partyVehicleId', e.target.value)}
+                    disabled={!salesData.partyId}
                     size="small"
                     required
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <VehicleIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
                   >
                     <MenuItem value=""><em>Select Vehicle</em></MenuItem>
                     {vehicles.map(vehicle => (
@@ -314,14 +354,52 @@ function TradingPage() {
                     ))}
                   </TextField>
                 </Grid>
+{/* Supplier Dropdown */}
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Supplier"
+                  value={salesData.supplierId}
+                  onChange={(e) => handleSalesChange('supplierId', e.target.value)}
+                  size="small"
+                  InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SupplierIcon color="primary" />
+                        </InputAdornment>
+                      )
+                    }}
+                >
+                  <MenuItem value=""><em>Select Supplier</em></MenuItem>
+                  {suppliers.map(s => (
+                    <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Birds Quantity"
+                    type="number"
+                    value={salesData.birds}
+                    onChange={(e) => handleSalesChange('birds', e.target.value)}
+                    size="small"
+                    required
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start"><img width="28" height="28" src="https://img.icons8.com/color/48/chicken.png" alt="chicken"/></InputAdornment>
+                    }}
+                  />
+                </Grid>
 
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     fullWidth
-                    label="Quantity"
+                    label="Weight"
                     type="number"
-                    value={salesData.quantity}
-                    onChange={(e) => handleSalesChange('quantity', e.target.value)}
+                    step="0.01"
+                    value={salesData.kilograms}
+                    onChange={(e) => handleSalesChange('kilograms', e.target.value)}
                     size="small"
                     required
                     InputProps={{
@@ -359,7 +437,21 @@ function TradingPage() {
                     sx={{ bgcolor: '#f9f9f9' }}
                   />
                 </Grid>
-
+                {/* Payment Received */}
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Payment Received (₹)"
+                    type="number"
+                    step="0.01"
+                    value={salesData.payment}
+                    onChange={(e) => handleSalesChange('payment', e.target.value)}
+                    size="small"
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">₹</InputAdornment>
+                    }}
+                  />
+                </Grid>
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
@@ -386,15 +478,19 @@ function TradingPage() {
                 
                 <Button
                   variant="outlined"
-                  onClick={() => setSalesData({
-                    date: new Date().toISOString().slice(0, 10),
-                    party: '',
-                    vehicle: '',
-                    quantity: '',
-                    rate: '',
-                    amount: '',
-                    description: ''
-                  })}
+                  onClick={() => {
+                    setSalesData({
+                      date: new Date().toISOString().slice(0, 10),
+                      partyId: '',
+                      partyVehicleId: '',
+                      birds: '',
+                      kilograms: '',
+                      rate: '',
+                      amount: '',
+                      description: ''
+                    });
+                    setVehicles([]);
+                  }}
                 >
                   Clear
                 </Button>
@@ -434,8 +530,8 @@ function TradingPage() {
                     select
                     fullWidth
                     label="Party"
-                    value={paymentData.party}
-                    onChange={(e) => handlePaymentChange('party', e.target.value)}
+                    value={paymentData.partyId}
+                    onChange={(e) => handlePaymentChange('partyId', e.target.value)}
                     size="small"
                     required
                   >
@@ -454,8 +550,8 @@ function TradingPage() {
                     label="Payment Amount"
                     type="number"
                     step="0.01"
-                    value={paymentData.amount}
-                    onChange={(e) => handlePaymentChange('amount', e.target.value)}
+                    value={paymentData.payment}
+                    onChange={(e) => handlePaymentChange('payment', e.target.value)}
                     size="small"
                     required
                     InputProps={{
@@ -519,8 +615,8 @@ function TradingPage() {
                   variant="outlined"
                   onClick={() => setPaymentData({
                     date: new Date().toISOString().slice(0, 10),
-                    party: '',
-                    amount: '',
+                    partyId: '',
+                    payment: '',
                     paymentMode: 'cash',
                     transactionId: '',
                     description: ''

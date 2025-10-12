@@ -38,6 +38,7 @@ import {
   Person as DriverIcon,
   Sms as SmsIcon,
   ShoppingCart as SaleIcon,
+  Agriculture as FarmIcon,
   Message as MessageIcon
 } from '@mui/icons-material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getSaleDetailsByCriteria } from '../service/SalesService';
@@ -489,6 +490,9 @@ const SalesEntry = () => {
                     onChange={(e) => handleFormChange('totalBirds', e.target.value)}
                     required
                     size="small"
+                     InputProps={{
+                      startAdornment: <InputAdornment position="start"><img width="28" height="28" src="https://img.icons8.com/color/48/chicken.png" alt="chicken"/></InputAdornment>
+                    }}
                   />
                 </Grid>
 
@@ -513,6 +517,9 @@ const SalesEntry = () => {
                     onChange={(e) => handleFormChange('returnToFarm', e.target.value)}
                     required
                     size="small"
+                     InputProps={{
+                      startAdornment: <InputAdornment position="start"><FarmIcon color="primary" /></InputAdornment>
+                    }}
                   />
                 </Grid>
 

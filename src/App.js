@@ -18,15 +18,24 @@ import PurchaseEntryPage from './components/purchase/PurchaseEntry';
 import MasterData from './components/masterData/MasterData';
 import Dashboard from './components/common/Dashboard';
 import TradingPage from './components/trading/TradingPage';
+import DriverSalesPage from './components/sale/DriverSalesPage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDriver, setIsDriver] = useState(false);
 
   useEffect(() => {
     const checkAuth = () => {
-      setIsAuthenticated(UserService.isAuthenticated());
-      setIsAdmin(UserService.adminOnly());
+      const authenticated = UserService.isAuthenticated();
+      const admin = UserService.adminOnly();
+      const driver = UserService.isDriver();
+      
+      console.log('App auth check:', { authenticated, admin, driver }); // Debug log
+      
+      setIsAuthenticated(authenticated);
+      setIsAdmin(admin);
+      setIsDriver(driver);
     };
 
     checkAuth();
@@ -38,15 +47,14 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        {/* **FIXED: Perfect Screen Fit Layout** */}
         <Box sx={{ 
           height: '100vh', 
           width: '100vw',
           display: 'flex', 
           flexDirection: 'column',
-          overflow: 'hidden' // Prevent page-level scroll
+          overflow: 'hidden'
         }}>
-          {/* Fixed Navbar - 64px height */}
+          {/* Fixed Navbar */}
           <Box sx={{ 
             flexShrink: 0,
             height: 64,
@@ -55,30 +63,47 @@ function App() {
             <Navbar />
           </Box>
           
-          {/* Main Content Area - Takes remaining space */}
+          {/* Main Content Area */}
           <Box 
             component="main" 
             sx={{ 
               flexGrow: 1,
-              height: 'calc(100vh - 64px - 56px)', // Total height - navbar - footer
-              overflow: 'auto', // Only content scrolls
+              height: 'calc(100vh - 64px - 56px)',
+              overflow: 'auto',
               bgcolor: 'background.default'
             }}
           >
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={
-                isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+                isAuthenticated ? (
+                  isDriver ? <Navigate to="/driver-sales" replace /> : <Navigate to="/dashboard" replace />
+                ) : <Navigate to="/login" replace />
               } />
+              
               <Route path="/login" element={
-                !isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" replace />
+                !isAuthenticated ? <LoginPage /> : (
+                  isDriver ? <Navigate to="/driver-sales" replace /> : <Navigate to="/dashboard" replace />
+                )
               } />
+              
               <Route path="/register" element={
-                !isAuthenticated ? <RegistrationPage /> : <Navigate to="/dashboard" replace />
+                !isAuthenticated ? <RegistrationPage /> : (
+                  isDriver ? <Navigate to="/driver-sales" replace /> : <Navigate to="/dashboard" replace />
+                )
               } />
 
-              {/* Protected Routes */}
-              {isAuthenticated && (
+              {/* Driver Routes */}
+              <Route path="/driver-sales" element={
+                isAuthenticated && isDriver ? (
+                  <DriverSalesPage />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              } />
+
+              {/* Regular User/Admin Routes */}
+              {isAuthenticated && !isDriver && (
                 <>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/sale" element={<SalesEntry />} />
@@ -92,18 +117,23 @@ function App() {
                       <Route path="/trading" element={<TradingPage />} />
                       <Route path="/admin/user-management" element={<UserManagementPage />} />
                       <Route path="/admin/update-user/:userId" element={<UpdateUser />} />
-                      <Route path="/register" element={<RegistrationPage />} />
                     </>
                   )}
                 </>
               )}
 
               {/* Fallback Route */}
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={
+                <Navigate to={
+                  isAuthenticated ? (
+                    isDriver ? "/driver-sales" : "/dashboard"
+                  ) : "/login"
+                } replace />
+              } />
             </Routes>
           </Box>
 
-          {/* Fixed Footer - 56px height */}
+          {/* Fixed Footer */}
           <Box sx={{ 
             flexShrink: 0,
             height: 56,

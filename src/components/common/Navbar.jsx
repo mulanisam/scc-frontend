@@ -28,7 +28,8 @@ import {
   Assessment as ReportsIcon,
   Logout as LogoutIcon,
   Person as ProfileIcon,
-  Business as CompanyIcon
+  Business as CompanyIcon,
+  LocalShipping as DriverIcon
 } from '@mui/icons-material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import UserService from '../service/UserService';
@@ -37,6 +38,7 @@ import { getCompanyConfig } from '../../config/companyConfig';
 function Navbar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDriver, setIsDriver] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   
@@ -50,8 +52,15 @@ function Navbar() {
 
   useEffect(() => {
     const checkAuth = () => {
-      setIsAuthenticated(UserService.isAuthenticated());
-      setIsAdmin(UserService.adminOnly());
+      const authenticated = UserService.isAuthenticated();
+      const admin = UserService.adminOnly();
+      const driver = UserService.isDriver();
+      
+      console.log('Navbar auth check:', { authenticated, admin, driver }); // Debug log
+      
+      setIsAuthenticated(authenticated);
+      setIsAdmin(admin);
+      setIsDriver(driver);
     };
 
     checkAuth();
@@ -71,35 +80,50 @@ function Navbar() {
     setAnchorEl(null);
   };
 
-  // **FIXED LOGOUT FUNCTION**
   const handleLogout = () => {
     const confirmLogout = window.confirm('Are you sure you want to logout?');
     if (confirmLogout) {
-      // Clear authentication data
       UserService.logout();
-      localStorage.clear(); // Clear all local storage
+      localStorage.clear();
       
-      // Update state immediately
       setIsAuthenticated(false);
       setIsAdmin(false);
+      setIsDriver(false);
       
-      // Dispatch storage event to update other components
       window.dispatchEvent(new Event('storage'));
-      
-      // Navigate to login page
       navigate('/login', { replace: true });
     }
     handleProfileMenuClose();
   };
 
-  const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, auth: true },
-    { name: 'Sales', path: '/sale', icon: <SaleIcon />, auth: true },
-    { name: 'Purchase', path: '/purchase', icon: <PurchaseIcon />, auth: true },
-    { name: 'Trading', path: '/trading', icon: <TradingIcon />, auth: true, admin: true },
-    { name: 'Masters', path: '/master-data', icon: <MasterIcon />, auth: true },
-    { name: 'Reports', path: '/reports', icon: <ReportsIcon />, auth: true }
-  ];
+  // Define navigation items based on roles
+  const getNavItems = () => {
+    if (isDriver) {
+      return [
+        { name: 'Driver Sales', path: '/driver-sales', icon: <DriverIcon />, auth: true }
+      ];
+    }
+    
+    // Regular user and admin items
+    const items = [
+      { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, auth: true },
+      { name: 'Sales', path: '/sale', icon: <SaleIcon />, auth: true },
+      { name: 'Purchase', path: '/purchase', icon: <PurchaseIcon />, auth: true },
+      { name: 'Masters', path: '/master-data', icon: <MasterIcon />, auth: true },
+      { name: 'Reports', path: '/reports', icon: <ReportsIcon />, auth: true }
+    ];
+
+    // Add admin-only items
+    if (isAdmin) {
+      items.push(
+        { name: 'Trading', path: '/trading', icon: <TradingIcon />, auth: true, admin: true }
+      );
+    }
+
+    return items;
+  };
+
+  const navItems = getNavItems();
 
   const drawer = (
     <Box sx={{ width: 280, height: '100%', bgcolor: 'primary.main' }}>
@@ -222,6 +246,17 @@ function Navbar() {
             >
               {isMobile ? companyConfig.shortName : companyConfig.name}
             </Typography>
+            
+            {/* Show user role indicator */}
+            {isDriver && (
+              <Typography variant="body2" sx={{ 
+                color: 'rgba(255,255,255,0.8)', 
+                ml: 1, 
+                fontSize: '0.8rem' 
+              }}>
+                (Driver)
+              </Typography>
+            )}
           </Box>
 
           {!isMobile && (

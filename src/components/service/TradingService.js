@@ -34,7 +34,7 @@ const getBalanceAmount = (partyId, vendorId) => {
 
 // Create sales entry
 const createSalesEntry = (salesEntry) => {
-  return axios.post(`${API_BASE_URL}/user/sales/bulk`, salesEntry, {
+  return axios.post(`${API_BASE_URL}/trading/sale`, salesEntry, {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${getToken()}`
@@ -42,15 +42,15 @@ const createSalesEntry = (salesEntry) => {
   });
 };
 
-// Create payment entry
 const createPaymentEntry = (paymentEntry) => {
-  return axios.post(`${API_BASE_URL}/user/payments`, paymentEntry, {
+  return axios.post(`${API_BASE_URL}/trading/payment`, paymentEntry, {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${getToken()}`
     }
   });
 };
+
 
 export {
   getParties,

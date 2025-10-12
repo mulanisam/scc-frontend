@@ -130,6 +130,24 @@ class UserService{
     static adminOnly(){
         return this.isAuthenticated() && this.isAdmin();
     }
+// Add to UserService.js
+    static isDriver() {
+    const role = localStorage.getItem('role');
+    return role === 'DRIVER';
+    }
+
+    static getDriverInfo() {
+    const driverInfo = localStorage.getItem('driverInfo');
+    return driverInfo ? JSON.parse(driverInfo) : null;
+    }
+
+    static setDriverInfo(driverInfo) {
+    localStorage.setItem('driverInfo', JSON.stringify(driverInfo));
+    }
+
+    static getUserRole() {
+    return localStorage.getItem('role');
+    }
 
 }
 

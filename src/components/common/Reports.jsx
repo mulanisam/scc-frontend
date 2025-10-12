@@ -79,6 +79,7 @@ const ReportPage = () => {
 
   const fetchSubTypeIds = async (type) => {
     try {
+      if(type === 'party') type = 'parties';
       const data = await getData(type);
       const subTypeData = data.data;
       if (Array.isArray(subTypeData)) {
@@ -287,7 +288,12 @@ const ReportPage = () => {
       { value: 'all', label: 'All Purchase Data' },
       { value: 'vehicle', label: 'Vehicle Wise' },
       { value: 'driver', label: 'Driver Wise' }
-    ]
+    ],
+    trading: [
+      { value: 'party', label: 'Party Wise' },
+      { value: 'all', label: 'All Trading Data' }
+      
+    ],
   };
 
   return (
@@ -341,6 +347,7 @@ const ReportPage = () => {
                     <MenuItem value=""><em>Select Type</em></MenuItem>
                     <MenuItem value="sale">Sales Report</MenuItem>
                     <MenuItem value="purchase">Purchase Report</MenuItem>
+                    <MenuItem value="trading">Trading Report</MenuItem>
                   </TextField>
                 </Grid>
                 
