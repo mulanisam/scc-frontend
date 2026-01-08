@@ -43,6 +43,7 @@ function LoginPage() {
         navigate('/dashboard', { replace: true }); // Use replace to prevent back navigation
       } else {
         setError(userData.message || 'Login failed');
+        navigate('/login', { replace: true });
       }
     } catch (error) {
       console.error(error);

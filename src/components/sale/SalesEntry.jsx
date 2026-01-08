@@ -368,7 +368,7 @@ const SalesEntry = () => {
 
       {/* Fixed Header Section */}
       <Box sx={{ flexShrink: 0 }}>
-        <Container maxWidth="xl" sx={{ py: 2 }}>
+        <Container maxWidth="xl" sx={{ py: 1 }}>
          
           {/* Form Section - Fixed */}
           <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
@@ -547,7 +547,7 @@ const SalesEntry = () => {
               <CardHeader 
                 title="Customer Sales Details" 
                 sx={{ 
-                  bgcolor: 'secondary.main', 
+                  bgcolor: 'primary.main', 
                   color: 'white',
                   py: 1,
                   flexShrink: 0,
@@ -556,7 +556,7 @@ const SalesEntry = () => {
               />
               
               {/* Search Box - Fixed */}
-              <Box sx={{ p: 2, bgcolor: '#f8f9fa', flexShrink: 0 }}>
+              <Box sx={{ p: 1, bgcolor: '#f8f9fa', flexShrink: 0 }}>
                 <TextField
                   fullWidth
                   placeholder="Search customers..."
@@ -598,7 +598,7 @@ const SalesEntry = () => {
                               fontWeight: 'bold', 
                               bgcolor: '#f5f5f5',
                               whiteSpace: 'nowrap',
-                              py: 1,
+                              py: 0.5,
                               fontSize: '0.85rem'
                             }}
                           >
@@ -625,8 +625,8 @@ const SalesEntry = () => {
                               type="number"
                               value={customerSalesData?.birds || ''}
                               onChange={(e) => handleSalesDataChange(salesIndex, 'birds', e.target.value)}
-                              sx={{ width: 70 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                              sx={{ width: 80 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
                             />
                           </TableCell>
                           <TableCell>
@@ -636,8 +636,8 @@ const SalesEntry = () => {
                               step="0.1"
                               value={customerSalesData?.kilograms || ''}
                               onChange={(e) => handleSalesDataChange(salesIndex, 'kilograms', e.target.value)}
-                              sx={{ width: 70 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                              sx={{ width: 80 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
                             />
                           </TableCell>
                           <TableCell>
@@ -647,8 +647,8 @@ const SalesEntry = () => {
                               step="0.1"
                               value={customerSalesData?.rate || ''}
                               onChange={(e) => handleSalesDataChange(salesIndex, 'rate', e.target.value)}
-                              sx={{ width: 70 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                              sx={{ width: 80 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
                             />
                           </TableCell>
                           <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
@@ -660,23 +660,37 @@ const SalesEntry = () => {
                               type="number"
                               value={customerSalesData?.payment || ''}
                               onChange={(e) => handleSalesDataChange(salesIndex, 'payment', e.target.value)}
-                              sx={{ width: 70 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                              sx={{ width: 100 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
                             />
                           </TableCell>
                           <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
                             ₹{customerSalesData?.pending || 0}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: '0.85rem' }}>
+                          </TableCell>               
+                          <TableCell
+                            sx={{
+                              fontSize: '1rem',
+                              color:
+                                customerSalesData?.balanceAmount > 100000
+                                  ? 'darkred'
+                                  : customerSalesData?.balanceAmount > 50000
+                                  ? 'darkred'
+                                  : customerSalesData?.balanceAmount > 20000
+                                  ? 'darkgoldenrod'
+                                  : 'inherit',
+                              fontWeight: customerSalesData?.balanceAmount > 100000 ? 'bold' : 'normal',
+                            }}
+                          >
                             ₹{customerSalesData?.balanceAmount || 0}
                           </TableCell>
+
                           <TableCell>
                             <TextField
                               size="small"
                               value={customerSalesData?.description || ''}
                               onChange={(e) => handleSalesDataChange(salesIndex, 'description', e.target.value)}
-                              sx={{ width: 100 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
+                              sx={{ width: 120 }}
+                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
                             />
                           </TableCell>
                         </TableRow>
@@ -708,18 +722,18 @@ const SalesEntry = () => {
                           color: 'white',
                           bgcolor: 'primary.main',
                           border: 'none',
-                          width: 70
+                          //width: 70
                         }}>
-                          {totals.birds}
+                          BIRDS: {totals.birds}
                         </TableCell>
                         <TableCell sx={{ 
                           fontWeight: 'bold', 
                           color: 'white',
                           bgcolor: 'primary.main',
                           border: 'none',
-                          width: 70
+                         // width: 70
                         }}>
-                          {totals.kilograms.toFixed(1)}
+                          WEIGHT: {totals.kilograms.toFixed(1)}
                         </TableCell>
                         <TableCell sx={{ bgcolor: 'primary.main', border: 'none', width: 70 }}></TableCell>
                         <TableCell sx={{ 
@@ -728,16 +742,16 @@ const SalesEntry = () => {
                           bgcolor: 'primary.main',
                           border: 'none'
                         }}>
-                          ₹{totals.amount}
+                          AMOUNT: ₹{totals.amount}
                         </TableCell>
                         <TableCell sx={{ 
                           fontWeight: 'bold', 
                           color: 'white',
                           bgcolor: 'primary.main',
                           border: 'none',
-                          width: 70
+                          //width: 70
                         }}>
-                          ₹{totals.payment}
+                          PAYMENT: ₹{totals.payment}
                         </TableCell>
                         <TableCell sx={{ 
                           fontWeight: 'bold', 
@@ -745,7 +759,7 @@ const SalesEntry = () => {
                           bgcolor: 'primary.main',
                           border: 'none'
                         }}>
-                          ₹{totals.pending}
+                          PENDING: ₹{totals.pending}
                         </TableCell>
                         <TableCell colSpan={2} sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
                       </TableRow>
@@ -766,7 +780,7 @@ const SalesEntry = () => {
             alignItems: 'center',
             gap: 3, 
             justifyContent: 'center',
-            py: 2
+            py: 1
           }}>
             <Button
               variant="contained"
@@ -797,11 +811,11 @@ const SalesEntry = () => {
   display: 'flex', 
   alignItems: 'center',
   gap: 1,
-  border: '2px solid',
+  border: '1px solid',
   borderColor: formData.sendSms ? 'primary.main' : 'grey.300',
   borderRadius: 2,
-  px: 2,
-  py: 1,
+  px: 0.5,
+  py: 0.5,
   bgcolor: 'white', // Always white background
   transition: 'all 0.3s ease',
   '&:hover': {
