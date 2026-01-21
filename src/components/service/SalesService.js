@@ -37,6 +37,16 @@ const createSalesEntry = (salesEntry) => {
   });
 };
 
+// NEW: Create single sale entry
+const createSingleSale = (saleData) => {
+  return axios.post(`${API_BASE_URL}/user/sales/single`, saleData, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`
+    }
+  });
+};
+
 const saveSaleDetailsData = (salesDetails) => {
   return axios.post(`${API_BASE_URL}/user/sales/saveDetails`, salesDetails, {
     headers: {
