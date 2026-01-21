@@ -319,15 +319,39 @@ const CustomerLedgerView = () => {
 
         {selectedCustomer && (
           <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={5}>
                 <Typography variant="body2" color="text.secondary">Customer</Typography>
                 <Typography variant="h6">{selectedCustomer.name}</Typography>
                 <Typography variant="body2">{selectedCustomer.shopName}</Typography>
               </Grid>
-              <Grid item xs={12} sm={6} textAlign="right">
+              <Grid item xs={12} sm={4} textAlign="right">
                 <Typography variant="body2" color="text.secondary">Current Balance</Typography>
                 <Typography 
+                  variant="h4" 
+                  color={currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'}
+                >
+                  {formatCurrency(Math.abs(currentBalance))}
+                  {currentBalance > 0 && ' (Dr)'}
+                  {currentBalance < 0 && ' (Cr)'}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={3} textAlign="right">
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<DownloadIcon />}
+                  onClick={downloadLedgerPDF}
+                  disabled={!ledgerData || ledgerData.length === 0}
+                  fullWidth
+                  sx={{ height: '48px' }}
+                >
+                  Download PDF
+                </Button>
+              </Grid>
+            </Grid>
+          </Box>
+        )} 
                   variant="h4" 
                   color={currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'}
                 >
