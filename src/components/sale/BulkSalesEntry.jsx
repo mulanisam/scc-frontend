@@ -881,3 +881,5 @@ const SalesEntry = () => {
 };
 
 export default SalesEntry;
+// Also export as BulkSalesEntry for the tabs component
+export { SalesEntry as BulkSalesEntry };
