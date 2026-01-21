@@ -29,7 +29,8 @@ import {
   Logout as LogoutIcon,
   Person as ProfileIcon,
   Business as CompanyIcon,
-  LocalShipping as DriverIcon
+  LocalShipping as DriverIcon,
+  AccountBalanceWallet as LedgerIcon
 } from '@mui/icons-material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import UserService from '../service/UserService';
