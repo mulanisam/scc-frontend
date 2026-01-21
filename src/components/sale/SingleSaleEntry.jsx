@@ -360,7 +360,8 @@ const SingleSaleEntry = () => {
             </Grid>
           </Grid>
         </form>
-      </Paper>
+        </CardContent>
+      </Card>
     </Box>
   );
 };
