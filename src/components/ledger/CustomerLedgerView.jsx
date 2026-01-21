@@ -15,9 +15,23 @@ import {
   Chip,
   Alert,
   CircularProgress,
-  Autocomplete
+  Autocomplete,
+  Card,
+  CardContent,
+  CardHeader,
+  Divider,
+  InputAdornment,
+  Tooltip,
+  Container
 } from '@mui/material';
-import { Download as DownloadIcon } from '@mui/icons-material';
+import { 
+  Download as DownloadIcon,
+  AccountBalanceWallet as LedgerIcon,
+  Person as PersonIcon,
+  CalendarToday as DateIcon,
+  FilterList as FilterIcon,
+  Assessment as ReportIcon
+} from '@mui/icons-material';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -192,20 +206,19 @@ const CustomerLedgerView = () => {
         cellPadding: 3
       },
       columnStyles: {
-        0: { cellWidth: 22 }, // Date
-        1: { cellWidth: 25 }, // Type
-        2: { cellWidth: 45 }, // Description
-        3: { cellWidth: 25, halign: 'right' }, // Debit
-        4: { cellWidth: 25, halign: 'right' }, // Credit
-        5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' }, // Balance
-        6: { cellWidth: 20 } // Mode
+        0: { cellWidth: 22 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 45 },
+        3: { cellWidth: 25, halign: 'right' },
+        4: { cellWidth: 25, halign: 'right' },
+        5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+        6: { cellWidth: 20 }
       },
       alternateRowStyles: {
         fillColor: [245, 245, 245]
       },
       margin: { left: 15, right: 15 },
       didDrawPage: (data) => {
-        // Footer
         const pageCount = doc.internal.getNumberOfPages();
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
@@ -257,186 +270,273 @@ const CustomerLedgerView = () => {
   const currentBalance = ledgerData.length > 0 ? ledgerData[ledgerData.length - 1].runningBalance : 0;
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Paper elevation={3} sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <LedgerIcon color="primary" sx={{ fontSize: 40 }} />
           Customer Ledger
         </Typography>
+        <Typography variant="body2" color="text.secondary">
+          View complete transaction history and generate reports
+        </Typography>
+      </Box>
 
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={4}>
-            <Autocomplete
-              options={customers}
-              getOptionLabel={(option) => `${option.name} - ${option.shopName || ''}`}
-              value={selectedCustomer}
-              onChange={handleCustomerChange}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Select Customer"
-                  placeholder="Search customer..."
-                />
-              )}
-            />
+      {/* Filter Card */}
+      <Card elevation={3} sx={{ mb: 3 }}>
+        <CardHeader 
+          avatar={<FilterIcon color="primary" />}
+          title="Filter Options"
+          titleTypographyProps={{ variant: 'h6' }}
+          sx={{ bgcolor: 'primary.main', color: 'white', '& .MuiCardHeader-avatar': { color: 'white' } }}
+        />
+        <CardContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <Autocomplete
+                options={customers}
+                getOptionLabel={(option) => `${option.name} - ${option.shopName || ''}`}
+                value={selectedCustomer}
+                onChange={handleCustomerChange}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select Customer"
+                    placeholder="Search customer..."
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <PersonIcon color="primary" />
+                          </InputAdornment>
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                label="Start Date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <DateIcon color="primary" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                label="End Date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <DateIcon color="primary" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={2}>
+              <Tooltip title="Apply filter to view ledger">
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={handleFilterApply}
+                  disabled={!selectedCustomer || loading}
+                  startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FilterIcon />}
+                  size="small"
+                  sx={{ height: '40px' }}
+                >
+                  {loading ? 'Loading...' : 'Apply'}
+                </Button>
+              </Tooltip>
+            </Grid>
           </Grid>
+        </CardContent>
+      </Card>
 
-          <Grid item xs={12} md={3}>
-            <TextField
-              fullWidth
-              label="Start Date"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={3}>
-            <TextField
-              fullWidth
-              label="End Date"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={2}>
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={handleFilterApply}
-              disabled={!selectedCustomer || loading}
-              sx={{ height: '56px' }}
-            >
-              Apply Filter
-            </Button>
-          </Grid>
-        </Grid>
-
-        {selectedCustomer && (
-          <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+      {/* Customer Info & Download Card */}
+      {selectedCustomer && (
+        <Card elevation={3} sx={{ mb: 3, bgcolor: 'background.default' }}>
+          <CardContent>
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={5}>
-                <Typography variant="body2" color="text.secondary">Customer</Typography>
-                <Typography variant="h6">{selectedCustomer.name}</Typography>
-                <Typography variant="body2">{selectedCustomer.shopName}</Typography>
+              <Grid item xs={12} sm={4}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Customer</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>{selectedCustomer.name}</Typography>
+                  <Typography variant="body2" color="text.secondary">{selectedCustomer.shopName}</Typography>
+                  <Typography variant="body2" color="text.secondary">{selectedCustomer.mobileNo}</Typography>
+                </Box>
               </Grid>
-              <Grid item xs={12} sm={4} textAlign="right">
-                <Typography variant="body2" color="text.secondary">Current Balance</Typography>
+              
+              <Grid item xs={12} sm={4} textAlign="center">
+                <Typography variant="caption" color="text.secondary">Current Balance</Typography>
                 <Typography 
-                  variant="h4" 
-                  color={currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'}
+                  variant="h3" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    color: currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'
+                  }}
                 >
                   {formatCurrency(Math.abs(currentBalance))}
-                  {currentBalance > 0 && ' (Dr)'}
-                  {currentBalance < 0 && ' (Cr)'}
                 </Typography>
+                <Chip 
+                  label={currentBalance > 0 ? 'Debit (Dr)' : currentBalance < 0 ? 'Credit (Cr)' : 'Settled'}
+                  color={currentBalance > 0 ? 'error' : currentBalance < 0 ? 'success' : 'default'}
+                  size="small"
+                  sx={{ mt: 1 }}
+                />
               </Grid>
-              <Grid item xs={12} sm={3} textAlign="right">
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<DownloadIcon />}
-                  onClick={downloadLedgerPDF}
-                  disabled={!ledgerData || ledgerData.length === 0}
-                  fullWidth
-                  sx={{ height: '48px' }}
-                >
-                  Download PDF
-                </Button>
+
+              <Grid item xs={12} sm={4} textAlign="right">
+                <Tooltip title="Download ledger as PDF">
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<DownloadIcon />}
+                    onClick={downloadLedgerPDF}
+                    disabled={!ledgerData || ledgerData.length === 0}
+                    size="large"
+                    sx={{ minWidth: 180 }}
+                  >
+                    Download PDF
+                  </Button>
+                </Tooltip>
               </Grid>
             </Grid>
-          </Box>
-        )}
+          </CardContent>
+        </Card>
+      )}
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : ledgerData.length > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell align="right">Debit (Sale)</TableCell>
-                  <TableCell align="right">Credit (Payment)</TableCell>
-                  <TableCell align="right">Balance</TableCell>
-                  <TableCell>Payment Mode</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {ledgerData.map((entry) => (
-                  <TableRow 
-                    key={entry.id}
-                    sx={{ 
-                      bgcolor: entry.isBackdated ? 'action.hover' : 'inherit',
-                      '&:hover': { bgcolor: 'action.selected' }
-                    }}
-                  >
-                    <TableCell>
-                      {formatDate(entry.transactionDate)}
-                      {entry.isBackdated && (
-                        <Chip 
-                          label="Backdated" 
-                          size="small" 
-                          color="warning" 
-                          sx={{ ml: 1 }} 
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={entry.transactionType} 
-                        color={getTransactionTypeColor(entry.transactionType)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{entry.description}</TableCell>
-                    <TableCell align="right" sx={{ color: 'error.main' }}>
-                      {entry.debitAmount > 0 ? formatCurrency(entry.debitAmount) : '-'}
-                    </TableCell>
-                    <TableCell align="right" sx={{ color: 'success.main' }}>
-                      {entry.creditAmount > 0 ? formatCurrency(entry.creditAmount) : '-'}
-                    </TableCell>
-                    <TableCell 
-                      align="right" 
+      {/* Ledger Data Card */}
+      <Card elevation={3}>
+        <CardHeader 
+          avatar={<ReportIcon />}
+          title="Transaction History"
+          titleTypographyProps={{ variant: 'h6' }}
+        />
+        <Divider />
+        <CardContent sx={{ p: 0 }}>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : ledgerData.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.100' }}>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Debit (Sale)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Credit (Payment)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Balance</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Mode</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ledgerData.map((entry) => (
+                    <TableRow 
+                      key={entry.id}
                       sx={{ 
-                        fontWeight: 'bold',
-                        color: entry.runningBalance > 0 ? 'error.main' : entry.runningBalance < 0 ? 'success.main' : 'text.primary'
+                        bgcolor: entry.isBackdated ? 'warning.lighter' : 'inherit',
+                        '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >
-                      {formatCurrency(Math.abs(entry.runningBalance))}
-                      {entry.runningBalance > 0 && ' Dr'}
-                      {entry.runningBalance < 0 && ' Cr'}
-                    </TableCell>
-                    <TableCell>{entry.paymentMode || '-'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        ) : selectedCustomer ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="body1" color="text.secondary">
-              No ledger entries found for this customer
-            </Typography>
-          </Box>
-        ) : (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="body1" color="text.secondary">
-              Please select a customer to view ledger
-            </Typography>
-          </Box>
-        )}
-      </Paper>
-    </Box>
+                      <TableCell>
+                        {formatDate(entry.transactionDate)}
+                        {entry.isBackdated && (
+                          <Chip 
+                            label="Backdated" 
+                            size="small" 
+                            color="warning" 
+                            sx={{ ml: 1, height: 20 }} 
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={entry.transactionType} 
+                          color={getTransactionTypeColor(entry.transactionType)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{entry.description}</TableCell>
+                      <TableCell align="right" sx={{ color: 'error.main', fontWeight: 500 }}>
+                        {entry.debitAmount > 0 ? formatCurrency(entry.debitAmount) : '-'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: 'success.main', fontWeight: 500 }}>
+                        {entry.creditAmount > 0 ? formatCurrency(entry.creditAmount) : '-'}
+                      </TableCell>
+                      <TableCell 
+                        align="right" 
+                        sx={{ 
+                          fontWeight: 'bold',
+                          color: entry.runningBalance > 0 ? 'error.main' : entry.runningBalance < 0 ? 'success.main' : 'text.primary'
+                        }}
+                      >
+                        {formatCurrency(Math.abs(entry.runningBalance))}
+                        {entry.runningBalance > 0 && ' Dr'}
+                        {entry.runningBalance < 0 && ' Cr'}
+                      </TableCell>
+                      <TableCell>
+                        {entry.paymentMode ? (
+                          <Chip label={entry.paymentMode} size="small" variant="outlined" />
+                        ) : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : selectedCustomer ? (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <ReportIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary">
+                No ledger entries found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                This customer has no transactions in the selected period
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary">
+                Select a customer to view ledger
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Use the filter above to choose a customer
+              </Typography>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    </Container>
   );
 };
 
