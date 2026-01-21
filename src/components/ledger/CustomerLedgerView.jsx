@@ -351,17 +351,6 @@ const CustomerLedgerView = () => {
               </Grid>
             </Grid>
           </Box>
-        )} 
-                  variant="h4" 
-                  color={currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'}
-                >
-                  {formatCurrency(Math.abs(currentBalance))}
-                  {currentBalance > 0 && ' (Dr)'}
-                  {currentBalance < 0 && ' (Cr)'}
-                </Typography>
-              </Grid>
-            </Grid>
-          </Box>
         )}
 
         {loading ? (
