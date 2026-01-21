@@ -135,29 +135,41 @@ const SingleSaleEntry = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Paper elevation={3} sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          Single Sale Entry
-        </Typography>
+    <Box>
+      <Card elevation={2}>
+        <CardHeader
+          avatar={<SingleIcon color="primary" />}
+          title="Single Sale Entry"
+          subheader="Quick entry for individual sales"
+          sx={{ bgcolor: 'grey.50' }}
+        />
+        <Divider />
+        <CardContent>
+          {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Date"
-                type="date"
-                name="date"
-                value={formData.date}
-                onChange={handleChange}
-                required
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
+          <form onSubmit={handleSubmit}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Date"
+                  type="date"
+                  name="date"
+                  value={formData.date}
+                  onChange={handleChange}
+                  required
+                  InputLabelProps={{ shrink: true }}
+                  size="small"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <DateIcon color="primary" />
+                      </InputAdornment>
+                    )
+                  }}
+                />
+              </Grid>
 
             <Grid item xs={12} sm={6}>
               <TextField
