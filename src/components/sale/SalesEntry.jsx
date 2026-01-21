@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import { Box, Paper, Tabs, Tab, Typography } from '@mui/material';
+import { 
+  Box, 
+  Container,
+  Paper, 
+  Tabs, 
+  Tab, 
+  Typography,
+  Card,
+  CardContent
+} from '@mui/material';
 import { 
   GridOn as BulkIcon, 
   PostAdd as SingleIcon, 
@@ -21,7 +30,7 @@ function TabPanel({ children, value, index, ...other }) {
       {...other}
     >
       {value === index && (
-        <Box sx={{ p: 0 }}>
+        <Box>
           {children}
         </Box>
       )}
@@ -44,36 +53,51 @@ const SalesEntryTabs = () => {
   };
 
   return (
-    <Box sx={{ width: '100%', bgcolor: 'background.default', minHeight: '100vh' }}>
-      <Paper elevation={3} sx={{ borderRadius: 0 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Sales & Payment Entry
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Choose your preferred entry method from the tabs below
+        </Typography>
+      </Box>
+
+      <Card elevation={3}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs 
             value={activeTab} 
             onChange={handleTabChange} 
             aria-label="sales entry tabs"
             variant="fullWidth"
             sx={{
+              bgcolor: 'background.paper',
               '& .MuiTab-root': {
-                minHeight: 64,
+                minHeight: 70,
                 fontSize: '1rem',
-                fontWeight: 500,
+                fontWeight: 600,
+                textTransform: 'none',
+                '&.Mui-selected': {
+                  color: 'primary.main',
+                  bgcolor: 'action.selected'
+                }
               },
             }}
           >
             <Tab 
-              icon={<BulkIcon />} 
+              icon={<BulkIcon sx={{ fontSize: 28 }} />} 
               iconPosition="start"
               label="Bulk Entry" 
               {...a11yProps(0)} 
             />
             <Tab 
-              icon={<SingleIcon />} 
+              icon={<SingleIcon sx={{ fontSize: 28 }} />} 
               iconPosition="start"
               label="Single Entry" 
               {...a11yProps(1)} 
             />
             <Tab 
-              icon={<PaymentIcon />} 
+              icon={<PaymentIcon sx={{ fontSize: 28 }} />} 
               iconPosition="start"
               label="Payment Entry" 
               {...a11yProps(2)} 
@@ -81,19 +105,27 @@ const SalesEntryTabs = () => {
           </Tabs>
         </Box>
 
-        <TabPanel value={activeTab} index={0}>
-          <BulkSalesEntry />
-        </TabPanel>
+        <CardContent sx={{ p: 0 }}>
+          <TabPanel value={activeTab} index={0}>
+            <Box sx={{ p: 2 }}>
+              <BulkSalesEntry />
+            </Box>
+          </TabPanel>
 
-        <TabPanel value={activeTab} index={1}>
-          <SingleSaleEntry />
-        </TabPanel>
+          <TabPanel value={activeTab} index={1}>
+            <Box sx={{ p: 2 }}>
+              <SingleSaleEntry />
+            </Box>
+          </TabPanel>
 
-        <TabPanel value={activeTab} index={2}>
-          <PaymentEntry />
-        </TabPanel>
-      </Paper>
-    </Box>
+          <TabPanel value={activeTab} index={2}>
+            <Box sx={{ p: 2 }}>
+              <PaymentEntry />
+            </Box>
+          </TabPanel>
+        </CardContent>
+      </Card>
+    </Container>
   );
 };
 
