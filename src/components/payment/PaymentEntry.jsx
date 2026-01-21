@@ -111,32 +111,41 @@ const PaymentEntry = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Paper elevation={3} sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          Payment Entry
-        </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          Record customer payment independent of sales
-        </Typography>
+    <Box>
+      <Card elevation={2}>
+        <CardHeader
+          avatar={<PaymentIcon color="primary" />}
+          title="Payment Entry"
+          subheader="Record customer payment independent of sales"
+          sx={{ bgcolor: 'grey.50' }}
+        />
+        <Divider />
+        <CardContent>
+          {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Payment Date"
-                type="date"
-                name="paymentDate"
-                value={formData.paymentDate}
-                onChange={handleChange}
-                required
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
+          <form onSubmit={handleSubmit}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Payment Date"
+                  type="date"
+                  name="paymentDate"
+                  value={formData.paymentDate}
+                  onChange={handleChange}
+                  required
+                  InputLabelProps={{ shrink: true }}
+                  size="small"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <DateIcon color="primary" />
+                      </InputAdornment>
+                    )
+                  }}
+                />
+              </Grid>
 
             <Grid item xs={12} sm={6}>
               <Autocomplete
