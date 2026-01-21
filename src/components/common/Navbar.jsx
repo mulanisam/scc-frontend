@@ -110,6 +110,7 @@ function Navbar() {
       { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, auth: true },
       { name: 'Sales', path: '/sale', icon: <SaleIcon />, auth: true },
       { name: 'Purchase', path: '/purchase', icon: <PurchaseIcon />, auth: true },
+      { name: 'Ledger', path: '/ledger', icon: <LedgerIcon />, auth: true },
       { name: 'Masters', path: '/master-data', icon: <MasterIcon />, auth: true },
       { name: 'Reports', path: '/reports', icon: <ReportsIcon />, auth: true }
     ];
