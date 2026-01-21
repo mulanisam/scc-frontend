@@ -66,6 +66,8 @@ export {
   getDrivers,
   getCustomersByRoute,
   createSalesEntry,
+  createSingleSale,
   getVehicles,
-  getSaleDetailsByCriteria
+  getSaleDetailsByCriteria,
+  saveSaleDetailsData
 };
