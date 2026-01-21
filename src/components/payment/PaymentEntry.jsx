@@ -159,6 +159,18 @@ const PaymentEntry = () => {
                     label="Customer"
                     required
                     placeholder="Search customer..."
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <PersonIcon color="primary" />
+                          </InputAdornment>
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
                   />
                 )}
               />
