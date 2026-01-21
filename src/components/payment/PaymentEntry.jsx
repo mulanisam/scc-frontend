@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
   TextField,
   Button,
   Typography,
@@ -9,8 +8,19 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
-  Autocomplete
+  Autocomplete,
+  Card,
+  CardContent,
+  CardHeader,
+  Divider,
+  InputAdornment
 } from '@mui/material';
+import { 
+  Payment as PaymentIcon,
+  CalendarToday as DateIcon,
+  Person as PersonIcon,
+  AccountBalance as BankIcon
+} from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/axiosConfig';
 import PaymentService from '../service/PaymentService';
