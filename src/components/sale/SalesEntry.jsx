@@ -54,14 +54,6 @@ const SalesEntryTabs = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Sales & Payment Entry
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Choose your preferred entry method from the tabs below
-        </Typography>
-      </Box>
 
       <Card elevation={3}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -73,7 +65,7 @@ const SalesEntryTabs = () => {
             sx={{
               bgcolor: 'background.paper',
               '& .MuiTab-root': {
-                minHeight: 70,
+                minHeight: 30,
                 fontSize: '1rem',
                 fontWeight: 600,
                 textTransform: 'none',

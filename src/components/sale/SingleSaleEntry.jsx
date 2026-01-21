@@ -147,12 +147,16 @@ const SingleSaleEntry = () => {
 
   return (
     <Box>
-      <Card elevation={2}>
+      <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
         <CardHeader
           avatar={<SingleIcon color="primary" />}
           title="Single Sale Entry"
-          subheader="Quick entry for individual sales"
-          sx={{ bgcolor: 'grey.50' }}
+          sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
         />
         <Divider />
         <CardContent>
@@ -161,7 +165,7 @@ const SingleSaleEntry = () => {
 
           <form onSubmit={handleSubmit}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <TextField
                   fullWidth
                   label="Date"

@@ -24,6 +24,7 @@ import {
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/axiosConfig';
 import PaymentService from '../service/PaymentService';
+import {  getDrivers } from '../service/SalesService';
 
 const PaymentEntry = () => {
   const [loading, setLoading] = useState(false);
@@ -31,6 +32,7 @@ const PaymentEntry = () => {
   const [error, setError] = useState('');
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [drivers, setDrivers] = useState([]);
 
   const [formData, setFormData] = useState({
     customerId: '',
@@ -44,6 +46,7 @@ const PaymentEntry = () => {
 
   useEffect(() => {
     loadCustomers();
+    loadMasterData();
   }, []);
 
   const loadCustomers = async () => {
@@ -70,7 +73,20 @@ const PaymentEntry = () => {
       customerId: newValue ? newValue.id : '' 
     }));
   };
-
+const loadMasterData = async () => {
+    try {
+      const [driversRes] = await Promise.all([
+       
+        getDrivers()
+        
+      ]);
+     
+      setDrivers(driversRes.data);
+      
+    } catch (err) {
+      setError('Failed to load master data');
+    }
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -112,12 +128,17 @@ const PaymentEntry = () => {
 
   return (
     <Box>
-      <Card elevation={2}>
+      <Card elevation={2} sx={{ mb: 2, borderRadius: 2 }}>
         <CardHeader
           avatar={<PaymentIcon color="primary" />}
           title="Payment Entry"
-          subheader="Record customer payment independent of sales"
-          sx={{ bgcolor: 'grey.50' }}
+       
+          sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
         />
         <Divider />
         <CardContent>
@@ -222,12 +243,19 @@ const PaymentEntry = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                select
                 label="Received By"
                 name="receivedBy"
                 value={formData.receivedBy}
                 onChange={handleChange}
                 required
-              />
+              >
+               {drivers.map((driver) => (
+                                <MenuItem key={driver.id} value={driver.id}>
+                                  {driver.name}
+                                </MenuItem>
+                              ))}
+                              </TextField>
             </Grid>
 
             <Grid item xs={12}>

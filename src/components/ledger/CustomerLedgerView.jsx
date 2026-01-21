@@ -271,25 +271,22 @@ const CustomerLedgerView = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <LedgerIcon color="primary" sx={{ fontSize: 40 }} />
-          Customer Ledger
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          View complete transaction history and generate reports
-        </Typography>
-      </Box>
+      
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
       {/* Filter Card */}
-      <Card elevation={3} sx={{ mb: 3 }}>
+      <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
         <CardHeader 
-          avatar={<FilterIcon color="primary" />}
-          title="Filter Options"
-          titleTypographyProps={{ variant: 'h6' }}
-          sx={{ bgcolor: 'primary.main', color: 'white', '& .MuiCardHeader-avatar': { color: 'white' } }}
+          avatar={<LedgerIcon />}
+          title="Customer Ledger"
+       
+           sx={{ 
+                bgcolor: 'primary.main', 
+                color: 'white',
+                py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              }}
         />
         <CardContent>
           <Grid container spacing={2}>
@@ -380,22 +377,22 @@ const CustomerLedgerView = () => {
 
       {/* Customer Info & Download Card */}
       {selectedCustomer && (
-        <Card elevation={3} sx={{ mb: 3, bgcolor: 'background.default' }}>
+        <Card elevation={1} sx={{ mb: 1, bgcolor: 'background.default' }}>
           <CardContent>
-            <Grid container spacing={2} alignItems="center">
+            <Grid container spacing={1} alignItems="center">
               <Grid item xs={12} sm={4}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">Customer</Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>{selectedCustomer.name}</Typography>
-                  <Typography variant="body2" color="text.secondary">{selectedCustomer.shopName}</Typography>
-                  <Typography variant="body2" color="text.secondary">{selectedCustomer.mobileNo}</Typography>
+                  {/* <Typography variant="caption" color="text.secondary">Customer</Typography> */}
+                  <Typography variant="h5" sx={{ fontWeight: 600 }}>{selectedCustomer.name}</Typography>
+                  <Typography variant="body1" color="text.secondary">{selectedCustomer.shopName}</Typography>
+                  <Typography variant="body1" color="text.secondary">{selectedCustomer.mobileNo}</Typography>
                 </Box>
               </Grid>
               
               <Grid item xs={12} sm={4} textAlign="center">
                 <Typography variant="caption" color="text.secondary">Current Balance</Typography>
                 <Typography 
-                  variant="h3" 
+                  variant="h4" 
                   sx={{ 
                     fontWeight: 'bold',
                     color: currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'
@@ -433,11 +430,11 @@ const CustomerLedgerView = () => {
 
       {/* Ledger Data Card */}
       <Card elevation={3}>
-        <CardHeader 
+        {/* <CardHeader 
           avatar={<ReportIcon />}
           title="Transaction History"
           titleTypographyProps={{ variant: 'h6' }}
-        />
+        /> */}
         <Divider />
         <CardContent sx={{ p: 0 }}>
           {loading ? (
