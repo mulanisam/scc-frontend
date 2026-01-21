@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
   TextField,
   Button,
   Typography,
   Grid,
   MenuItem,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Card,
+  CardContent,
+  CardHeader,
+  Divider,
+  InputAdornment
 } from '@mui/material';
+import { 
+  PostAdd as SingleIcon,
+  CalendarToday as DateIcon,
+  Person as PersonIcon,
+  LocalShipping as VehicleIcon,
+  Scale as WeightIcon
+} from '@mui/icons-material';
 import { createSingleSale, getRoutes, getDrivers, getVehicles, getCustomersByRoute } from '../service/SalesService';
 
 const SingleSaleEntry = () => {
