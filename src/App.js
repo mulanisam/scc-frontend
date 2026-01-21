@@ -19,6 +19,7 @@ import MasterData from './components/masterData/MasterData';
 import Dashboard from './components/common/Dashboard';
 import TradingPage from './components/trading/TradingPage';
 import DriverSalesPage from './components/sale/DriverSalesPage';
+import CustomerLedgerView from './components/ledger/CustomerLedgerView';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
