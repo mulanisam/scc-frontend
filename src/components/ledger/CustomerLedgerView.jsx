@@ -429,30 +429,31 @@ const CustomerLedgerView = () => {
       )}
 
       {/* Ledger Data Card */}
-      <Card elevation={3}>
-        {/* <CardHeader 
+      <Card elevation={3} sx={{ height: 'calc(100vh - 520px)', minHeight: 400, display: 'flex', flexDirection: 'column' }}>
+        <CardHeader 
           avatar={<ReportIcon />}
           title="Transaction History"
           titleTypographyProps={{ variant: 'h6' }}
-        /> */}
+          sx={{ flexShrink: 0 }}
+        />
         <Divider />
-        <CardContent sx={{ p: 0 }}>
+        <CardContent sx={{ p: 0, flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
               <CircularProgress />
             </Box>
           ) : ledgerData.length > 0 ? (
-            <TableContainer>
-              <Table size="small">
+            <TableContainer sx={{ flexGrow: 1, overflow: 'auto' }}>
+              <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.100' }}>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Debit (Sale)</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Credit (Payment)</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Balance</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Mode</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Description</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Debit (Sale)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Credit (Payment)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Balance</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Mode</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
