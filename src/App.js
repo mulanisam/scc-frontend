@@ -110,6 +110,7 @@ function App() {
                   <Route path="/sale" element={<SalesEntry />} />
                   <Route path="/purchase" element={<PurchaseEntryPage />} />
                   <Route path="/reports" element={<Reports />} />
+                  <Route path="/ledger" element={<CustomerLedgerView />} />
                   <Route path="/master-data" element={<MasterData />} />
                   
                   {/* Admin Routes */}
