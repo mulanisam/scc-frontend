@@ -257,7 +257,8 @@ const PaymentEntry = () => {
             </Grid>
           </Grid>
         </form>
-      </Paper>
+        </CardContent>
+      </Card>
     </Box>
   );
 };
