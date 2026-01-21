@@ -146,7 +146,7 @@ const SingleSaleEntry = () => {
 
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 label="Date"
@@ -159,7 +159,7 @@ const SingleSaleEntry = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 select
@@ -171,32 +171,12 @@ const SingleSaleEntry = () => {
               >
                 {routes.map((route) => (
                   <MenuItem key={route.id} value={route.id}>
-                    {route.routeName}
+                    {route.name}
                   </MenuItem>
                 ))}
               </TextField>
             </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                select
-                label="Customer"
-                name="customerId"
-                value={formData.customerId}
-                onChange={handleChange}
-                required
-                disabled={!formData.routeId}
-              >
-                {customers.map((customer) => (
-                  <MenuItem key={customer.id} value={customer.id}>
-                    {customer.name} - {customer.shopName}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 select
@@ -214,7 +194,7 @@ const SingleSaleEntry = () => {
               </TextField>
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 select
@@ -231,8 +211,39 @@ const SingleSaleEntry = () => {
                 ))}
               </TextField>
             </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                fullWidth
+                select
+                label="Customer"
+                name="customerId"
+                value={formData.customerId}
+                onChange={handleChange}
+                required
+                disabled={!formData.routeId}
+              >
+                {customers.map((customer) => (
+                  <MenuItem key={customer.id} value={customer.id}>
+                    {customer.name} - {customer.city.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                fullWidth
+                label="Birds "
+                type="number"
+                name="birds"
+                value={formData.birds}
+                onChange={handleChange}
+                required
+                inputProps={{ min: "0" }}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 label="Kilograms"
@@ -245,7 +256,7 @@ const SingleSaleEntry = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 label="Rate per Kg"
@@ -258,7 +269,7 @@ const SingleSaleEntry = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 label="Amount"
@@ -271,19 +282,8 @@ const SingleSaleEntry = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Birds (Optional)"
-                type="number"
-                name="birds"
-                value={formData.birds}
-                onChange={handleChange}
-                inputProps={{ min: "0" }}
-              />
-            </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 label="Payment Received"
@@ -295,7 +295,7 @@ const SingleSaleEntry = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 select
