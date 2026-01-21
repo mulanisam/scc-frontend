@@ -109,6 +109,151 @@ const CustomerLedgerView = () => {
     return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  const downloadLedgerPDF = () => {
+    if (!selectedCustomer || ledgerData.length === 0) {
+      alert('No data to download');
+      return;
+    }
+
+    const companyConfig = getCompanyConfig();
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    
+    // Company Header
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(companyConfig.name, pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(companyConfig.address, pageWidth / 2, 22, { align: 'center' });
+    
+    doc.setFontSize(9);
+    doc.text(`Phone: ${companyConfig.contactNumber} | Email: ${companyConfig.email}`, pageWidth / 2, 28, { align: 'center' });
+    
+    // Document Title
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('CUSTOMER LEDGER REPORT', pageWidth / 2, 38, { align: 'center' });
+    
+    // Line separator
+    doc.setLineWidth(0.5);
+    doc.line(15, 41, pageWidth - 15, 41);
+    
+    // Customer Details
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Customer Details:', 15, 48);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Name: ${selectedCustomer.name}`, 15, 54);
+    doc.text(`Shop: ${selectedCustomer.shopName || 'N/A'}`, 15, 60);
+    doc.text(`Mobile: ${selectedCustomer.mobileNo || 'N/A'}`, 15, 66);
+    
+    // Period
+    const periodText = startDate && endDate 
+      ? `Period: ${formatDate(startDate)} to ${formatDate(endDate)}`
+      : 'Period: All Transactions';
+    doc.text(periodText, pageWidth - 15, 54, { align: 'right' });
+    
+    // Current Balance
+    doc.setFont('helvetica', 'bold');
+    const balanceColor = currentBalance > 0 ? [220, 38, 38] : currentBalance < 0 ? [46, 125, 50] : [0, 0, 0];
+    doc.setTextColor(...balanceColor);
+    doc.text(`Current Balance: ${formatCurrency(Math.abs(currentBalance))} ${currentBalance > 0 ? '(Dr)' : currentBalance < 0 ? '(Cr)' : ''}`, pageWidth - 15, 60, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    
+    // Prepare table data
+    const tableData = ledgerData.map(entry => [
+      formatDate(entry.transactionDate),
+      entry.transactionType,
+      entry.description || '-',
+      entry.debitAmount > 0 ? formatCurrency(entry.debitAmount) : '-',
+      entry.creditAmount > 0 ? formatCurrency(entry.creditAmount) : '-',
+      formatCurrency(Math.abs(entry.runningBalance)) + (entry.runningBalance > 0 ? ' Dr' : entry.runningBalance < 0 ? ' Cr' : ''),
+      entry.paymentMode || '-'
+    ]);
+    
+    // Add table
+    doc.autoTable({
+      startY: 72,
+      head: [['Date', 'Type', 'Description', 'Debit', 'Credit', 'Balance', 'Mode']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 8,
+        cellPadding: 3
+      },
+      columnStyles: {
+        0: { cellWidth: 22 }, // Date
+        1: { cellWidth: 25 }, // Type
+        2: { cellWidth: 45 }, // Description
+        3: { cellWidth: 25, halign: 'right' }, // Debit
+        4: { cellWidth: 25, halign: 'right' }, // Credit
+        5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' }, // Balance
+        6: { cellWidth: 20 } // Mode
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245]
+      },
+      margin: { left: 15, right: 15 },
+      didDrawPage: (data) => {
+        // Footer
+        const pageCount = doc.internal.getNumberOfPages();
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text(
+          `Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+        doc.text(
+          `Generated on: ${new Date().toLocaleString('en-IN')}`,
+          15,
+          pageHeight - 10
+        );
+        doc.text(
+          companyConfig.website,
+          pageWidth - 15,
+          pageHeight - 10,
+          { align: 'right' }
+        );
+      }
+    });
+    
+    // Summary box at the end
+    const finalY = doc.lastAutoTable.finalY + 10;
+    
+    // Calculate totals
+    const totalDebit = ledgerData.reduce((sum, entry) => sum + entry.debitAmount, 0);
+    const totalCredit = ledgerData.reduce((sum, entry) => sum + entry.creditAmount, 0);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary:', 15, finalY);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total Debit (Sales): ${formatCurrency(totalDebit)}`, 15, finalY + 7);
+    doc.text(`Total Credit (Payments): ${formatCurrency(totalCredit)}`, 15, finalY + 13);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...balanceColor);
+    doc.text(`Net Balance: ${formatCurrency(Math.abs(currentBalance))} ${currentBalance > 0 ? '(Dr)' : currentBalance < 0 ? '(Cr)' : ''}`, 15, finalY + 19);
+    doc.setTextColor(0, 0, 0);
+    
+    // Save PDF
+    const fileName = `Ledger_${selectedCustomer.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+  };
+
   const currentBalance = ledgerData.length > 0 ? ledgerData[ledgerData.length - 1].runningBalance : 0;
 
   return (
