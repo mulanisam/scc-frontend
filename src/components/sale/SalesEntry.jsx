@@ -27,13 +27,10 @@ function TabPanel({ children, value, index, ...other }) {
       hidden={value !== index}
       id={`sales-tabpanel-${index}`}
       aria-labelledby={`sales-tab-${index}`}
+      style={{ height: '100%' }}
       {...other}
     >
-      {value === index && (
-        <Box>
-          {children}
-        </Box>
-      )}
+      {value === index && children}
     </div>
   );
 }
@@ -53,71 +50,86 @@ const SalesEntryTabs = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-
-      <Card elevation={3}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={handleTabChange} 
-            aria-label="sales entry tabs"
-            variant="fullWidth"
-            sx={{
-              bgcolor: 'background.paper',
-              '& .MuiTab-root': {
-                minHeight: 30,
-                fontSize: '1rem',
-                fontWeight: 600,
-                textTransform: 'none',
-                '&.Mui-selected': {
-                  color: 'primary.main',
-                  bgcolor: 'action.selected'
-                }
-              },
-            }}
-          >
-            <Tab 
-              icon={<BulkIcon sx={{ fontSize: 28 }} />} 
-              iconPosition="start"
-              label="Bulk Entry" 
-              {...a11yProps(0)} 
-            />
-            <Tab 
-              icon={<SingleIcon sx={{ fontSize: 28 }} />} 
-              iconPosition="start"
-              label="Single Entry" 
-              {...a11yProps(1)} 
-            />
-            <Tab 
-              icon={<PaymentIcon sx={{ fontSize: 28 }} />} 
-              iconPosition="start"
-              label="Payment Entry" 
-              {...a11yProps(2)} 
-            />
-          </Tabs>
+    <Box sx={{ 
+      height: '85vh', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* <Container maxWidth="xl" sx={{ mt: 4, mb: 2, flexShrink: 0 }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h4" gutterBottom>
+            Sales & Payment Entry
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Choose your preferred entry method from the tabs below
+          </Typography>
         </Box>
+      </Container> */}
 
-        <CardContent sx={{ p: 0 }}>
-          <TabPanel value={activeTab} index={0}>
-            <Box sx={{ p: 2 }}>
+      <Container maxWidth="xl" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', pb: 2 }}>
+        <Card elevation={3} sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={handleTabChange} 
+              aria-label="sales entry tabs"
+              variant="fullWidth"
+              sx={{
+                bgcolor: 'background.paper',
+                '& .MuiTab-root': {
+                  minHeight: 0,
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  '&.Mui-selected': {
+                    color: 'primary.main',
+                    bgcolor: 'action.selected'
+                  }
+                },
+              }}
+            >
+              <Tab 
+                icon={<BulkIcon sx={{ fontSize: 28 }} />} 
+                iconPosition="start"
+                label="Bulk Entry" 
+                {...a11yProps(0)} 
+              />
+              <Tab 
+                icon={<SingleIcon sx={{ fontSize: 28 }} />} 
+                iconPosition="start"
+                label="Single Entry" 
+                {...a11yProps(1)} 
+              />
+              <Tab 
+                icon={<PaymentIcon sx={{ fontSize: 28 }} />} 
+                iconPosition="start"
+                label="Payment Entry" 
+                {...a11yProps(2)} 
+              />
+            </Tabs>
+          </Box>
+
+          <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+            <TabPanel value={activeTab} index={0}>
               <BulkSalesEntry />
-            </Box>
-          </TabPanel>
+            </TabPanel>
 
-          <TabPanel value={activeTab} index={1}>
-            <Box sx={{ p: 2 }}>
-              <SingleSaleEntry />
-            </Box>
-          </TabPanel>
+            <TabPanel value={activeTab} index={1}>
+              <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
+                <SingleSaleEntry />
+              </Box>
+            </TabPanel>
 
-          <TabPanel value={activeTab} index={2}>
-            <Box sx={{ p: 2 }}>
-              <PaymentEntry />
-            </Box>
-          </TabPanel>
-        </CardContent>
-      </Card>
-    </Container>
+            <TabPanel value={activeTab} index={2}>
+              <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
+                <PaymentEntry />
+              </Box>
+            </TabPanel>
+          </Box>
+        </Card>
+      </Container>
+    </Box>
   );
 };
 

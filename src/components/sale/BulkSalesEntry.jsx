@@ -190,7 +190,13 @@ const SalesEntry = () => {
           const rate = Number(newData[index].rate) || 0;
           const kilograms = Number(newData[index].kilograms) || 0;
           newData[index].amount = roundToNearestTen(rate * kilograms);
+
+          if(newData[index].amount > 0 && (newData[index].payment !== '' || newData[index].payment !== null)){
+             const payment = Number(newData[index].payment) || 0;
+             const amount = Number(newData[index].amount) || 0;
+            newData[index].pending = roundToNearestTen(amount - payment);
         }
+      }
         
         if (field === 'payment' || field === 'amount') {
           const amount = Number(newData[index].amount) || 0;
@@ -542,7 +548,7 @@ const SalesEntry = () => {
       {/* Scrollable Customer Sales Details Section */}
       {formData.selectedRoute && (
         <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <Container maxWidth="xl" sx={{ height: '100%', pb: 1 }}>
+          <Container maxWidth="xl" sx={{ height: '100%', pb: 0 }}>
             <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
               <CardHeader 
                 title="Customer Sales Details" 

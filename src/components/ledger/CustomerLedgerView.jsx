@@ -429,13 +429,13 @@ const CustomerLedgerView = () => {
       )}
 
       {/* Ledger Data Card */}
-      <Card elevation={3} sx={{ height: 'calc(100vh - 520px)', minHeight: 450, display: 'flex', flexDirection: 'column' }}>
-        {/* <CardHeader 
+      <Card elevation={3} sx={{ height: 'calc(100vh - 520px)', minHeight: 400, display: 'flex', flexDirection: 'column' }}>
+        <CardHeader 
           avatar={<ReportIcon />}
           title="Transaction History"
           titleTypographyProps={{ variant: 'h6' }}
           sx={{ flexShrink: 0 }}
-        /> */}
+        />
         <Divider />
         <CardContent sx={{ p: 0, flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {loading ? (
