@@ -40,7 +40,8 @@ import {
   fetchSalesSummary,
   REPORT_PERIODS,
   REPORT_DIMENSIONS,
-  fetchTripReconciliation
+  fetchTripReconciliation,
+  fetchBoughtVsSold
 } from '../service/ReportsService';
 import { getData } from '../service/MasterDataService';
 import { exportReportToPdf, exportReportToExcel } from './reportExport';
@@ -159,6 +160,29 @@ const RECONCILIATION_COLUMNS = [
   { key: 'closingBalance', label: 'Closing balance', numeric: true }
 ];
 
+/**
+ * Bought against sold. The per-kilogram rates are the reliable comparison here:
+ * they are ratios, so they hold even when the two sides cover different volumes.
+ * The absolute margin only means something where both sides are recorded.
+ */
+const COMPARISON_COLUMNS = [
+  { key: 'periodLabel', label: 'Period' },
+  { key: 'birdsBought', label: 'Birds bought', numeric: true },
+  { key: 'birdsSold', label: 'Birds sold', numeric: true },
+  { key: 'weightBought', label: 'Kg bought', numeric: true },
+  { key: 'weightSold', label: 'Kg sold', numeric: true },
+  { key: 'weightLoss', label: 'Weight loss', numeric: true },
+  { key: 'buyRatePerKg', label: 'Buy /kg', numeric: true },
+  { key: 'sellRatePerKg', label: 'Sell /kg', numeric: true },
+  { key: 'marginPerKg', label: 'Margin /kg', numeric: true },
+  { key: 'amountBought', label: 'Bought', numeric: true },
+  { key: 'amountSold', label: 'Sold', numeric: true },
+  { key: 'purchaseExpenses', label: 'Expenses', numeric: true },
+  { key: 'netMargin', label: 'Net margin', numeric: true },
+  { key: 'owedToSuppliers', label: 'Owed to suppliers', numeric: true },
+  { key: 'pendingFromCustomers', label: 'Due from customers', numeric: true }
+];
+
 const DETAIL_COLUMNS = [
   { key: 'date', label: 'Date' },
   { key: 'route', label: 'Route' },
@@ -265,6 +289,8 @@ const ReportPage = () => {
         data = await fetchSalesDetail(request);
       } else if (nextMode === 'reconciliation') {
         data = await fetchTripReconciliation(request);
+      } else if (nextMode === 'comparison') {
+        data = await fetchBoughtVsSold(request);
       } else {
         data = await fetchSalesSummary(request);
       }
@@ -320,6 +346,8 @@ const ReportPage = () => {
     ? DETAIL_COLUMNS
     : mode === 'reconciliation'
       ? RECONCILIATION_COLUMNS
+      : mode === 'comparison'
+        ? COMPARISON_COLUMNS
       : summaryColumns(dimension.label, filters.groupBy2 === 'NONE' ? null : dimension2.label);
   const totals = report?.totals;
 
@@ -328,11 +356,33 @@ const ReportPage = () => {
   const rows = useMemo(() => {
     if (mode === 'detail') return report?.detail ?? [];
     if (mode === 'reconciliation') return report?.trips ?? [];
+    if (mode === 'comparison') return report?.periods ?? [];
     return report?.summary ?? [];
   }, [mode, report]);
 
   /** Totals shaped like a row, so the table, PDF and Excel share one definition. */
   const totalsRow = useMemo(() => {
+    if (mode === 'comparison') {
+      if (!report) return null;
+      return {
+        periodLabel: 'TOTAL',
+        birdsBought: count(report.birdsBought),
+        birdsSold: count(report.birdsSold),
+        weightBought: weight(report.weightBought),
+        weightSold: weight(report.weightSold),
+        weightLoss: report.weightLoss == null ? '—' : weight(report.weightLoss),
+        buyRatePerKg: money(report.buyRatePerKg),
+        sellRatePerKg: money(report.sellRatePerKg),
+        marginPerKg: money(report.marginPerKg),
+        amountBought: money(report.amountBought),
+        amountSold: money(report.amountSold),
+        purchaseExpenses: money(report.purchaseExpenses),
+        netMargin: money(report.netMargin),
+        owedToSuppliers: money(report.owedToSuppliers),
+        pendingFromCustomers: money(report.pendingFromCustomers)
+      };
+    }
+
     // Reconciliation carries its totals on the response itself rather than in a
     // totals object, because the figures are different ones.
     if (mode === 'reconciliation') {
@@ -387,6 +437,19 @@ const ReportPage = () => {
     averageWeightPerBird: row.averageWeightPerBird == null
       ? (row.averageWeightPerBird === undefined ? undefined : '—')
       : Number(row.averageWeightPerBird).toFixed(3),
+    // Bought-vs-sold fields.
+    birdsBought: row.birdsBought !== undefined ? count(row.birdsBought) : undefined,
+    weightBought: row.weightBought !== undefined ? weight(row.weightBought) : undefined,
+    amountBought: row.amountBought !== undefined ? money(row.amountBought) : undefined,
+    amountSold: row.amountSold !== undefined ? money(row.amountSold) : undefined,
+    buyRatePerKg: row.buyRatePerKg !== undefined ? money(row.buyRatePerKg) : undefined,
+    sellRatePerKg: row.sellRatePerKg !== undefined ? money(row.sellRatePerKg) : undefined,
+    marginPerKg: row.marginPerKg !== undefined ? money(row.marginPerKg) : undefined,
+    netMargin: row.netMargin !== undefined ? money(row.netMargin) : undefined,
+    purchaseExpenses: row.purchaseExpenses !== undefined ? money(row.purchaseExpenses) : undefined,
+    owedToSuppliers: row.owedToSuppliers !== undefined ? money(row.owedToSuppliers) : undefined,
+    pendingFromCustomers: row.pendingFromCustomers !== undefined
+      ? money(row.pendingFromCustomers) : undefined,
     birdsLoaded: row.birdsLoaded !== undefined ? count(row.birdsLoaded) : undefined,
     birdsSold: row.birdsSold !== undefined ? count(row.birdsSold) : undefined,
     mortality: row.mortality !== undefined ? count(row.mortality) : undefined,
@@ -405,7 +468,9 @@ const ReportPage = () => {
     transactionCount: row.transactionCount !== undefined ? count(row.transactionCount) : undefined
   })), [rows]);
 
-  const reportTitle = report?.title ?? (mode === 'reconciliation' ? 'Trip reconciliation' : 'Sales report');
+  const reportTitle = report?.title ?? (mode === 'reconciliation'
+    ? 'Trip reconciliation'
+    : mode === 'comparison' ? 'Bought vs sold' : 'Sales report');
   /**
    * Render items for the summary table: data rows with repeated values blanked,
    * and a subtotal after each group.
@@ -615,6 +680,7 @@ const ReportPage = () => {
             <ToggleButton value="summary">Period totals</ToggleButton>
             <ToggleButton value="detail">Transactions</ToggleButton>
             <ToggleButton value="reconciliation">Trip reconciliation</ToggleButton>
+            <ToggleButton value="comparison">Bought vs sold</ToggleButton>
           </ToggleButtonGroup>
 
           <Button
@@ -675,6 +741,49 @@ const ReportPage = () => {
         </Alert>
       )}
 
+      {/* Bought vs sold: the rate comparison first, since it is the figure that
+          holds regardless of how much of each side is recorded. */}
+      {mode === 'comparison' && report && (
+        <>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+            {[
+              ['Buy rate', `${money(report.buyRatePerKg)}/kg`, 'reliable'],
+              ['Sell rate', `${money(report.sellRatePerKg)}/kg`, 'reliable'],
+              ['Margin', `${money(report.marginPerKg)}/kg`, 'reliable'],
+              ['Birds bought', count(report.birdsBought)],
+              ['Birds sold', count(report.birdsSold)],
+              ['Kg bought', weight(report.weightBought)],
+              ['Kg sold', weight(report.weightSold)],
+              ['Owed to suppliers', money(report.owedToSuppliers)],
+              ['Due from customers', money(report.pendingFromCustomers)]
+            ].map(([label, value, reliable]) => (
+              <Paper
+                key={label}
+                variant="outlined"
+                sx={{
+                  px: 1.5,
+                  py: 1,
+                  minWidth: 118,
+                  ...(reliable ? { borderColor: 'primary.main', borderWidth: 2 } : {})
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">{label}</Typography>
+                <Typography sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {value}
+                </Typography>
+              </Paper>
+            ))}
+          </Box>
+
+          {report.coverageWarning && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <strong>Margin totals cannot be trusted here.</strong> {report.coverageWarning}
+              {' '}The per-kilogram rates above (outlined) are ratios, so they hold regardless.
+            </Alert>
+          )}
+        </>
+      )}
+
       {/* Reconciliation headline figures and data-quality flags */}
       {mode === 'reconciliation' && report && (
         <>
@@ -725,7 +834,7 @@ const ReportPage = () => {
       )}
 
       {/* Headline figures */}
-      {mode !== 'reconciliation' && totals && (
+      {mode !== 'reconciliation' && mode !== 'comparison' && totals && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
           {[
             ['Sales', count(totals.transactionCount)],

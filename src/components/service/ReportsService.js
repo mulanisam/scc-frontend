@@ -64,3 +64,19 @@ export const fetchTripReconciliation = async (filters) => {
   const response = await apiClient.post('/reports/sales/reconciliation', filters);
   return response.data;
 };
+
+/**
+ * Bought against sold per period: birds, weight and money on each side, the rate
+ * paid and realised, shrinkage and margin.
+ *
+ * The response carries coverage fields and a coverageWarning. Show them: with
+ * purchases barely recorded, the absolute margin reads as a large profit that is
+ * really the missing purchase side. The per-kilogram rate comparison is a ratio
+ * and stays meaningful regardless.
+ *
+ * @param {Object} filters { startDate, endDate, period, routeId?, driverId? }
+ */
+export const fetchBoughtVsSold = async (filters) => {
+  const response = await apiClient.post('/reports/sales/comparison', filters);
+  return response.data;
+};
