@@ -17,6 +17,7 @@ import Reports from './components/common/Reports';
 import SalesEntry from './components/sale/SalesEntry';
 import PurchaseEntryPage from './components/purchase/PurchaseEntry';
 import MasterData from './components/masterData/MasterData';
+import ContactQuality from './components/masterData/ContactQuality';
 import Dashboard from './components/common/Dashboard';
 import TradingPage from './components/trading/TradingPage';
 import DriverSalesPage from './components/sale/DriverSalesPage';
@@ -84,6 +85,7 @@ const AppRoutes = () => {
       <Route path="/reports" element={<RequireAuth allow={isOfficeUser}><Reports /></RequireAuth>} />
       <Route path="/ledger" element={<RequireAuth allow={isOfficeUser}><CustomerLedgerView /></RequireAuth>} />
       <Route path="/master-data" element={<RequireAuth allow={isOfficeUser}><MasterData /></RequireAuth>} />
+      <Route path="/contact-quality" element={<RequireAuth allow={isOfficeUser}><ContactQuality /></RequireAuth>} />
 
       {/* Admin only */}
       <Route path="/trading" element={<RequireAuth allow={isAdminUser}><TradingPage /></RequireAuth>} />

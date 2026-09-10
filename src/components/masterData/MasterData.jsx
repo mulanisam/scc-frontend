@@ -51,6 +51,7 @@ import {
   FilterList as FilterIcon
 } from '@mui/icons-material';
 import UserService from '../service/UserService';
+import ContactQuality from './ContactQuality';
 import {
   getData,
   createData,
@@ -69,10 +70,18 @@ const baseDataTypes = [
 
 const adminDataTypes = ['parties', 'partyVehicles'];
 
+/**
+ * Not an entity like the others - this tab renders the contact clean-up screen
+ * instead of the generic CRUD table, because the work is "fix these 130 numbers",
+ * not "list and edit a table". It lives here because it is master data, and
+ * because that is where somebody goes to correct a customer's details.
+ */
+const CONTACTS_TAB = 'contacts';
+
 export default function MasterData() {
   const allTabs = UserService.adminOnly()
-    ? [...baseDataTypes, ...adminDataTypes]
-    : baseDataTypes;
+    ? [...baseDataTypes, ...adminDataTypes, CONTACTS_TAB]
+    : [...baseDataTypes, CONTACTS_TAB];
 
   const [tabIndex, setTabIndex] = useState(0);
   const [dataType, setDataType] = useState(allTabs[0]);
@@ -117,6 +126,12 @@ export default function MasterData() {
   }, []);
 
   const fetchData = useCallback(async (type) => {
+    // The contacts tab is not an entity and has no CRUD endpoint; it fetches its
+    // own data. Asking getData for it would 404.
+    if (type === CONTACTS_TAB) {
+      setData([]);
+      return;
+    }
     setLoading(true);
     try {
       const res = await getData(type);
@@ -258,6 +273,11 @@ export default function MasterData() {
     setSearchTerm('');
   };
 
+  // The contacts tab replaces the generic search-and-table body with its own
+  // screen: it has its own filters, its own totals, and edits a single field
+  // rather than opening the customer form.
+  const isContacts = dataType === CONTACTS_TAB;
+
   return (
     <Box sx={{ 
       height: '100%', 
@@ -295,9 +315,13 @@ export default function MasterData() {
                     fontWeight: 600
                   }}
                 />
-                <Badge badgeContent={data.length} color="secondary">
-                  <CheckCircleIcon sx={{ color: 'white' }} />
-                </Badge>
+                {/* A record count means nothing on the contacts tab, which counts
+                    problems rather than rows and shows its own totals. */}
+                {!isContacts && (
+                  <Badge badgeContent={data.length} color="secondary">
+                    <CheckCircleIcon sx={{ color: 'white' }} />
+                  </Badge>
+                )}
               </Box>
             </Box>
           </Paper>
@@ -331,7 +355,8 @@ export default function MasterData() {
             </CardContent>
           </Card>
 
-          {/* Search and Controls */}
+          {/* Search and Controls - the contacts tab brings its own */}
+          {!isContacts && (
           <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
             <CardContent sx={{ py: 1.5 }}>
               <Grid container spacing={2} alignItems="center">
@@ -400,10 +425,21 @@ export default function MasterData() {
               </Grid>
             </CardContent>
           </Card>
+          )}
         </Container>
       </Box>
 
+      {/* Contacts tab: its own screen, scrolling in the same space the table uses */}
+      {isContacts && (
+        <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+          <Container maxWidth="xl">
+            <ContactQuality embedded />
+          </Container>
+        </Box>
+      )}
+
       {/* Scrollable Data Table Section */}
+      {!isContacts && (
       <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
         <Container maxWidth="xl" sx={{ height: '100%', pb: 2 }}>
           <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
@@ -535,6 +571,7 @@ export default function MasterData() {
           </Card>
         </Container>
       </Box>
+      )}
 
       {/* Form Dialog */}
       <Dialog open={openForm} onClose={handleCloseForm} maxWidth="md" fullWidth>
