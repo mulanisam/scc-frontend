@@ -1,67 +1,55 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../../config/axiosConfig.js';
+import apiClient from './api.js';
 
-const getToken = () => localStorage.getItem('token');
+/**
+ * Sales reporting.
+ *
+ * Goes through apiClient, which attaches the bearer token and turns a server
+ * rejection into an Error carrying the server's own message - so an invalid date
+ * range surfaces as "End date ... is before start date ..." rather than a
+ * generic failure.
+ *
+ * The previous version also exported downloadReportPDF and downloadReportExcel,
+ * which called /reports/download/pdf and /reports/download/excel. Neither
+ * endpoint has ever existed; exports are produced in the browser instead.
+ */
 
-// Fetch report data based on selected parameters
-export const fetchReportData = async (reportRequest) => {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/reports/fetch`, reportRequest, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching report data:', error);
-      throw error;
-    }
-  };
-
-// Download report in PDF format
-export const downloadReportPDF = async (reportType, subType, startDate, endDate) => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/reports/download/pdf`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-      params: {
-        reportType,
-        subType,
-        startDate,
-        endDate,
-      },
-      responseType: 'blob', // Important for downloading files
-    });
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'report.pdf');
-    document.body.appendChild(link);
-    link.click();
-  } catch (error) {
-    console.error('Error downloading PDF report:', error);
-    throw error;
-  }
+/**
+ * Transaction lines. Every filter is optional except the date range, and they
+ * combine, so this one call serves the customer-, route- and driver-wise views.
+ *
+ * @param {Object} filters { startDate, endDate, routeId?, customerId?,
+ *                           driverId?, vehicleId?, cityId?, excludeObsolete? }
+ */
+export const fetchSalesDetail = async (filters) => {
+  const response = await apiClient.post('/reports/sales/detail', filters);
+  return response.data;
 };
 
-// Download report in Excel format
-export const downloadReportExcel = async (reportType, subType, startDate, endDate) => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/reports/download/excel`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-      params: {
-        reportType,
-        subType,
-        startDate,
-        endDate,
-      },
-      responseType: 'blob', // Important for downloading files
-    });
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'report.xlsx');
-    document.body.appendChild(link);
-    link.click();
-  } catch (error) {
-    console.error('Error downloading Excel report:', error);
-    throw error;
-  }
+/**
+ * Aggregates per time bucket crossed with one business dimension.
+ *
+ * @param {Object} filters As above, plus:
+ *   period  - DAY | WEEK | MONTH | YEAR | ALL
+ *   groupBy - ROUTE | CUSTOMER | DRIVER | VEHICLE | CITY | NONE
+ */
+export const fetchSalesSummary = async (filters) => {
+  const response = await apiClient.post('/reports/sales/summary', filters);
+  return response.data;
 };
+
+export const REPORT_PERIODS = [
+  { value: 'DAY', label: 'Daily' },
+  { value: 'WEEK', label: 'Weekly' },
+  { value: 'MONTH', label: 'Monthly' },
+  { value: 'YEAR', label: 'Yearly' },
+  { value: 'ALL', label: 'Whole range' }
+];
+
+export const REPORT_DIMENSIONS = [
+  { value: 'CUSTOMER', label: 'Customer', master: 'customers', filterKey: 'customerId' },
+  { value: 'ROUTE', label: 'Route', master: 'routes', filterKey: 'routeId' },
+  { value: 'DRIVER', label: 'Driver', master: 'drivers', filterKey: 'driverId' },
+  { value: 'VEHICLE', label: 'Vehicle', master: 'vehicles', filterKey: 'vehicleId' },
+  { value: 'CITY', label: 'City', master: 'cities', filterKey: 'cityId' },
+  { value: 'NONE', label: 'No breakdown', master: null, filterKey: null }
+];

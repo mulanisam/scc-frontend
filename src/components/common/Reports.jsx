@@ -1,657 +1,638 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Container, 
-  Grid, 
-  TextField, 
-  MenuItem, 
-  Autocomplete, 
-  Typography, 
-  IconButton, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  TableSortLabel,
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
-  Card,
-  CardContent,
-  CardHeader,
-  Tooltip,
   CircularProgress,
-  Alert,
-  InputAdornment
+  Container,
+  Divider,
+  FormControlLabel,
+  LinearProgress,
+  MenuItem,
+  Paper,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography
 } from '@mui/material';
 import {
+  Assessment as ReportIcon,
+  PictureAsPdf as PdfIcon,
+  Download as ExcelIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
-  PictureAsPdf as PictureAsPdfIcon,
-  Download as DownloadIcon,
-  CalendarToday as DateIcon,
-  FilterList as FilterIcon,
+  TrendingUp as RisingIcon,
+  ArrowBack as BackIcon
 } from '@mui/icons-material';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { fetchReportData } from '../service/ReportsService';
+
+import {
+  fetchSalesDetail,
+  fetchSalesSummary,
+  REPORT_PERIODS,
+  REPORT_DIMENSIONS
+} from '../service/ReportsService';
 import { getData } from '../service/MasterDataService';
-import { getCompanyConfig } from '../../config/companyConfig';
+import { exportReportToPdf, exportReportToExcel } from './reportExport';
 
-const ReportPage = () => {
-  const [reportType, setReportType] = useState('');
-  const [subType, setSubType] = useState('');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [reportData, setReportData] = useState(null);
-  const [showReport, setShowReport] = useState(false);
-  const [subTypeId, setSubTypeId] = useState('');
-  const [subTypeIdOptions, setSubTypeIdOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState('');
+const today = () => new Date().toISOString().slice(0, 10);
 
-  useEffect(() => {
-    if (subType) {
-      fetchSubTypeIds(subType);
+/** Date-range shortcuts, since most questions are about a standard window. */
+const RANGE_PRESETS = [
+  {
+    label: 'Today',
+    range: () => ({ startDate: today(), endDate: today() })
+  },
+  {
+    label: 'This week',
+    range: () => {
+      const now = new Date();
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      return { startDate: monday.toISOString().slice(0, 10), endDate: today() };
     }
-  }, [subType]);
-
-  const handleReportTypeChange = (e) => {
-    setReportType(e.target.value);
-    setSubType('');
-    setSubTypeId('');
-    setSubTypeIdOptions([]);
-    setShowReport(false);
-    setError('');
-  };
-
-  const handleSubTypeChange = (e) => {
-    setSubType(e.target.value);
-    setSubTypeId('');
-    setError('');
-  };
-
-  const fetchSubTypeIds = async (type) => {
-    try {
-      if(type === 'party') type = 'parties';
-      const data = await getData(type);
-      const subTypeData = data.data;
-      if (Array.isArray(subTypeData)) {
-        const formattedOptions = subTypeData.map(item => ({
-          value: item.id,
-          label: item.name || item.vehicleNo || item.shopName || `${item.name || 'Unknown'}`
-        }));
-        setSubTypeIdOptions(formattedOptions);
-      } else {
-        console.error("Fetched data is not an array:", data);
-        setSubTypeIdOptions([]);
-      }
-    } catch (error) {
-      console.error("Error fetching subtype IDs:", error);
-      setSubTypeIdOptions([]);
+  },
+  {
+    label: 'This month',
+    range: () => {
+      const now = new Date();
+      return {
+        startDate: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
+        endDate: today()
+      };
     }
-  };
-
-  const handleSearch = async () => {
-    if (!reportType || !subType) {
-      setError('Please select both Report Type and Sub Type');
-      return;
+  },
+  {
+    label: 'This year',
+    range: () => ({ startDate: `${new Date().getFullYear()}-01-01`, endDate: today() })
+  },
+  {
+    label: 'Last 12 months',
+    range: () => {
+      const from = new Date();
+      from.setFullYear(from.getFullYear() - 1);
+      return { startDate: from.toISOString().slice(0, 10), endDate: today() };
     }
-    
-    setLoading(true);
-    setGenerating(true);
-    setError('');
-    const reportRequest = { reportType, subType, startDate, endDate, subTypeId };
-    
-    try {
-      const data = await fetchReportData(reportRequest);
-      setReportData(data.data);
-      setShowReport(true);
-      if (!data.data || data.data.length === 0) {
-        setError('No data found for the selected criteria');
-      }
-    } catch (error) {
-      console.error("Error fetching report data:", error);
-      setError('Error generating report. Please try again.');
-    } finally {
-      setLoading(false);
-      setGenerating(false);
-    }
-  };
-
-  const handleClear = () => {
-    setReportType('');
-    setSubType('');
-    setSubTypeId('');
-    setStartDate(new Date().toISOString().slice(0, 10));
-    setEndDate(new Date().toISOString().slice(0, 10));
-    setShowReport(false);
-    setReportData(null);
-    setSubTypeIdOptions([]);
-    setError('');
-  };
-
-  const sanitizeText = (text) => {
-    if (typeof text === 'string') {
-      return text.replace(/\r?\n|\r/g, ' ').trim();
-    }
-    return text;
-  };
-
-  const handleDownloadPdf = () => {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  // Get company configuration
-  const companyConfig = getCompanyConfig();
-  
-  const companyName = companyConfig.name;
-  const companyAddress = companyConfig.address;
-  const contactNumber = `Contact: ${companyConfig.contactNumber}`;
-  const reportName = `${reportType.toUpperCase()} ${subType.toUpperCase()} Report`;
-  const dateRange = `Date Range: ${startDate} to ${endDate}`;
-  const generationDate = `Generated: ${new Date().toLocaleDateString()}`;
-
-  if (reportData && reportData.length > 0) {
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const rightX = pageWidth - 10;
-
-    // Header
-    doc.setFontSize(14);
-    doc.text(reportName, 10, 10);
-    doc.setFontSize(10);
-    doc.text(dateRange, 10, 15);
-    doc.text(generationDate, 10, 20);
-
-    doc.setFontSize(14);
-    doc.text(companyName, rightX, 10, { align: 'right' });
-    doc.setFontSize(10);
-    doc.text(companyAddress, rightX, 15, { align: 'right' });
-    doc.text(contactNumber, rightX, 20, { align: 'right' });
-
-    const tableHeaders = getTableHeaders();
-    const tableData = reportData.map(row =>
-      tableHeaders.map(header => sanitizeText(row[header]))
-    );
-
-    // Add totals row
-    const totalsRow = tableHeaders.map(header => {
-      const totals = calculateTotals();
-      if (header.includes('NAME') || header.includes('SUPPLIER')) return 'TOTALS';
-      return typeof reportData[0][header] === 'number' ? (totals[header] || '') : '';
-    });
-    tableData.push(totalsRow);
-
-    autoTable(doc, {
-      head: [tableHeaders],
-      body: tableData,
-      theme: 'striped',
-      styles: {
-        cellPadding: 2,
-        fontSize: 8,
-        textColor: [0, 0, 0],
-        valign: 'middle',
-        halign: 'center',
-        overflow: 'linebreak',
-      },
-      headStyles: {
-        cellPadding: 2,
-        fontSize: 8,
-        textColor: [255, 255, 255],
-        fillColor: [21, 101, 192],
-        valign: 'middle',
-        halign: 'center',
-      },
-      margin: { top: 30, bottom: 10, left: 10, right: 10 },
-      tableWidth: 'auto',
-    });
-
-    doc.save(`${reportName.replace(/ /g, '_')}.pdf`);
   }
+];
+
+const money = (value) =>
+  `₹${(Number(value) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const weight = (value) => `${(Number(value) || 0).toFixed(3)}`;
+const count = (value) => (Number(value) || 0).toLocaleString('en-IN');
+
+/** Balance thresholds mirror the colouring used on the sales entry grid. */
+const balanceColour = (value) => {
+  const balance = Number(value) || 0;
+  if (balance > 50000) return 'error.main';
+  if (balance > 20000) return 'warning.dark';
+  if (balance < 0) return 'success.main';
+  return 'text.primary';
 };
 
+const numericCellSx = {
+  textAlign: 'right',
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap'
+};
 
-  const handleDownloadExcel = () => {
-    if (!reportData || reportData.length === 0) return;
+const SUMMARY_COLUMNS = [
+  { key: 'periodLabel', label: 'Period' },
+  { key: 'dimensionName', label: 'Name' },
+  { key: 'transactionCount', label: 'Sales', numeric: true },
+  { key: 'birds', label: 'Birds', numeric: true },
+  { key: 'weight', label: 'Weight (kg)', numeric: true },
+  { key: 'amount', label: 'Amount', numeric: true },
+  { key: 'payment', label: 'Received', numeric: true },
+  { key: 'pending', label: 'Pending', numeric: true },
+  { key: 'averageRate', label: 'Avg rate', numeric: true },
+  { key: 'closingBalance', label: 'Closing balance', numeric: true }
+];
 
-    const tableHeaders = getTableHeaders();
-    const tableData = reportData.map(row => {
-      const excelRow = {};
-      tableHeaders.forEach(header => {
-        excelRow[header] = sanitizeText(row[header]);
+const DETAIL_COLUMNS = [
+  { key: 'date', label: 'Date' },
+  { key: 'route', label: 'Route' },
+  { key: 'city', label: 'City' },
+  { key: 'customer', label: 'Customer' },
+  { key: 'shopName', label: 'Shop' },
+  { key: 'driver', label: 'Driver' },
+  { key: 'vehicle', label: 'Vehicle' },
+  { key: 'birds', label: 'Birds', numeric: true },
+  { key: 'weight', label: 'Weight (kg)', numeric: true },
+  { key: 'rate', label: 'Rate', numeric: true },
+  { key: 'amount', label: 'Amount', numeric: true },
+  { key: 'payment', label: 'Received', numeric: true },
+  { key: 'pending', label: 'Pending', numeric: true },
+  { key: 'balanceAfter', label: 'Balance after', numeric: true },
+  { key: 'description', label: 'Note' }
+];
+
+const ReportPage = () => {
+  const [mode, setMode] = useState('summary');
+  const [filters, setFilters] = useState({
+    startDate: RANGE_PRESETS[2].range().startDate,
+    endDate: today(),
+    period: 'WEEK',
+    groupBy: 'CUSTOMER',
+    excludeObsolete: true
+  });
+  const [dimensionFilter, setDimensionFilter] = useState({ key: null, value: null, label: '' });
+  const [masterOptions, setMasterOptions] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [drillFrom, setDrillFrom] = useState(null);
+
+  const dimension = useMemo(
+    () => REPORT_DIMENSIONS.find((d) => d.value === filters.groupBy) ?? REPORT_DIMENSIONS[0],
+    [filters.groupBy]
+  );
+
+  // Options for narrowing to one route, customer, driver and so on.
+  useEffect(() => {
+    if (!dimension.master) {
+      setMasterOptions([]);
+      setDimensionFilter({ key: null, value: null, label: '' });
+      return undefined;
+    }
+
+    let active = true;
+    setLoadingOptions(true);
+    getData(dimension.master)
+      .then((response) => {
+        if (!active) return;
+        const rows = Array.isArray(response.data) ? response.data : [];
+        setMasterOptions(
+          rows.map((row) => ({
+            id: row.id,
+            label: row.name || row.vehicleNo || row.shopName || `#${row.id}`
+          }))
+        );
+      })
+      .catch(() => {
+        if (active) setMasterOptions([]);
+      })
+      .finally(() => {
+        if (active) setLoadingOptions(false);
       });
-      return excelRow;
+
+    return () => {
+      active = false;
+    };
+  }, [dimension]);
+
+  const buildRequest = useCallback((overrides = {}) => {
+    const request = {
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      period: filters.period,
+      groupBy: filters.groupBy,
+      excludeObsolete: filters.excludeObsolete,
+      ...overrides
+    };
+    if (dimensionFilter.key && dimensionFilter.value) {
+      request[dimensionFilter.key] = dimensionFilter.value;
+    }
+    return request;
+  }, [filters, dimensionFilter]);
+
+  const run = useCallback(async (nextMode, overrides = {}) => {
+    setLoading(true);
+    setError('');
+    try {
+      const request = buildRequest(overrides);
+      const data = nextMode === 'detail'
+        ? await fetchSalesDetail(request)
+        : await fetchSalesSummary(request);
+      setReport(data);
+      setMode(nextMode);
+    } catch (err) {
+      // The API returns the reason (for example an end date before the start),
+      // so show it rather than a generic failure.
+      setError(err.message || 'Could not generate the report.');
+      setReport(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildRequest]);
+
+  const handleGenerate = () => {
+    setDrillFrom(null);
+    run(mode);
+  };
+
+  /** Click a summary row to see the transactions behind it. */
+  const drillInto = (row) => {
+    if (!dimension.filterKey || !row.dimensionId) return;
+    setDrillFrom({ mode, label: `${row.dimensionName} — ${row.periodLabel}` });
+    run('detail', {
+      [dimension.filterKey]: row.dimensionId,
+      startDate: row.periodStart,
+      endDate: row.periodEnd
     });
+  };
 
-    // Add totals row
-    const totals = calculateTotals();
-    const totalsRow = {};
-    tableHeaders.forEach(header => {
-      if (header.includes('NAME') || header.includes('SUPPLIER')) {
-        totalsRow[header] = 'TOTALS';
-      } else if (typeof reportData[0]?.[header] === 'number') {
-        totalsRow[header] = totals[header] || 0;
-      } else {
-        totalsRow[header] = '';
-      }
+  const backFromDrill = () => {
+    const previous = drillFrom;
+    setDrillFrom(null);
+    run(previous?.mode ?? 'summary');
+  };
+
+  const clear = () => {
+    setReport(null);
+    setError('');
+    setDrillFrom(null);
+    setDimensionFilter({ key: null, value: null, label: '' });
+    setFilters({
+      startDate: RANGE_PRESETS[2].range().startDate,
+      endDate: today(),
+      period: 'WEEK',
+      groupBy: 'CUSTOMER',
+      excludeObsolete: true
     });
-    tableData.push(totalsRow);
-
-    const ws = XLSX.utils.json_to_sheet(tableData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Report');
-    XLSX.writeFile(wb, `${reportType}_${subType}_report.xlsx`);
   };
 
-  const getTableHeaders = () => {
-    if (!reportData || reportData.length === 0) return [];
-    return Object.keys(reportData[0]);
-  };
+  const columns = mode === 'detail' ? DETAIL_COLUMNS : SUMMARY_COLUMNS;
+  const totals = report?.totals;
 
-  const calculateTotals = () => {
-    if (!reportData || reportData.length === 0) return {};
-    
-    const totals = {};
-    reportData.forEach(row => {
-      getTableHeaders().forEach(header => {
-        if (
-          header !== 'BALANCE PENDING' &&
-          typeof row[header] === 'number' &&
-          !isNaN(row[header])
-        ) {
-          totals[header] = (totals[header] || 0) + row[header];
-        }
-      });
-    });
-    return totals;
-  };
+  // Memoised because the display rows below derive from it: a fresh []
+  // on every render would rebuild every formatted row each time.
+  const rows = useMemo(
+    () => (mode === 'detail' ? report?.detail : report?.summary) ?? [],
+    [mode, report]
+  );
 
-  const reportTypeOptions = {
-    sale: [
-      { value: 'routes', label: 'Route Wise' },
-      { value: 'customers', label: 'Customer Wise' },
-      { value: 'vehicles', label: 'Vehicle Wise' },
-      { value: 'drivers', label: 'Driver Wise' },
-      { value: 'cities', label: 'City Wise' },
-    ],
-    purchase: [
-      { value: 'supplier', label: 'Supplier Wise' },
-      { value: 'all', label: 'All Purchase Data' },
-      { value: 'vehicle', label: 'Vehicle Wise' },
-      { value: 'driver', label: 'Driver Wise' }
-    ],
-    trading: [
-      { value: 'party', label: 'Party Wise' },
-      { value: 'all', label: 'All Trading Data' }
-      
-    ],
-  };
+  /** Totals shaped like a row, so the table, PDF and Excel share one definition. */
+  const totalsRow = useMemo(() => {
+    if (!totals) return null;
+    const base = {
+      transactionCount: count(totals.transactionCount),
+      birds: count(totals.birds),
+      weight: weight(totals.weight),
+      amount: money(totals.amount),
+      payment: money(totals.payment),
+      pending: money(totals.pending),
+      averageRate: money(totals.averageRate)
+    };
+    return mode === 'detail'
+      ? { ...base, date: 'TOTAL', customer: `${count(totals.rowCount)} transactions` }
+      : { ...base, periodLabel: 'TOTAL', dimensionName: `${count(totals.rowCount)} rows` };
+  }, [totals, mode]);
+
+  /** Rows formatted for display and for export, so both agree. */
+  const displayRows = useMemo(() => rows.map((row) => ({
+    ...row,
+    weight: weight(row.weight),
+    amount: money(row.amount),
+    payment: money(row.payment),
+    pending: money(row.pending),
+    rate: row.rate !== undefined ? money(row.rate) : undefined,
+    averageRate: row.averageRate !== undefined ? money(row.averageRate) : undefined,
+    balanceAfter: row.balanceAfter !== undefined ? money(row.balanceAfter) : undefined,
+    closingBalance: row.closingBalance !== undefined ? money(row.closingBalance) : undefined,
+    birds: count(row.birds),
+    transactionCount: row.transactionCount !== undefined ? count(row.transactionCount) : undefined
+  })), [rows]);
+
+  const exportTitle = `${report?.title ?? 'Sales report'}${drillFrom ? ` — ${drillFrom.label}` : ''}`;
+  const exportSubtitle = [
+    `${report?.startDate} to ${report?.endDate}`,
+    mode === 'summary' && report?.periodLabel ? `Period: ${report.periodLabel}` : null,
+    ...(report?.appliedFilters ?? [])
+  ].filter(Boolean).join('   |   ');
+
+  const exportArgs = () => ({
+    columns,
+    rows: displayRows,
+    totalsRow,
+    title: exportTitle,
+    subtitle: exportSubtitle
+  });
 
   return (
-    <Box sx={{ 
-      height: '100%', 
-      display: 'flex', 
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
-      {/* Fixed Header Section */}
-      <Box sx={{ flexShrink: 0 }}>
-        <Container maxWidth="xl" sx={{ py: 2 }}>
-          
-
-          {/* Report Parameters */}
-          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
-            <CardHeader 
-              title="Report Parameters" 
-              action={
-                <Chip 
-                  label={reportData ? `${reportData.length} Records` : 'No Data'}
-                  color={reportData && reportData.length > 0 ? 'success' : 'default'}
-                  size="small"
-                />
-              }
-              sx={{ 
-                bgcolor: 'primary.main', 
-                color: 'white',
-                py: 1,
-                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
-              }}
-            />
-            <CardContent>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={6} md={2}>
-                  <TextField
-                    label="Report Type"
-                    select
-                    fullWidth
-                    value={reportType}
-                    onChange={handleReportTypeChange}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <FilterIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  >
-                    <MenuItem value=""><em>Select Type</em></MenuItem>
-                    <MenuItem value="sale">Sales Report</MenuItem>
-                    <MenuItem value="purchase">Purchase Report</MenuItem>
-                    <MenuItem value="trading">Trading Report</MenuItem>
-                  </TextField>
-                </Grid>
-                
-                <Grid item xs={12} sm={6} md={2}>
-                  <TextField
-                    label="Sub Type"
-                    select
-                    fullWidth
-                    value={subType}
-                    onChange={handleSubTypeChange}
-                    disabled={!reportType}
-                    size="small"
-                  >
-                    <MenuItem value=""><em>Select Sub Type</em></MenuItem>
-                    {reportTypeOptions[reportType]?.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-
-                {subType && subType !== 'all' && (
-                  <Grid item xs={12} sm={6} md={2}>
-                    <Autocomplete
-                      disabled={!subType}
-                      options={subTypeIdOptions}
-                      getOptionLabel={option => option.label}
-                      value={subTypeIdOptions.find(option => option.value === subTypeId) || null}
-                      onChange={(_, newValue) => setSubTypeId(newValue?.value || '')}
-                      renderInput={params => (
-                        <TextField
-                          {...params}
-                          label="Filter (Optional)"
-                          placeholder="Search or select"
-                          fullWidth
-                          size="small"
-                        />
-                      )}
-                    />
-                  </Grid>
-                )}
-
-                <Grid item xs={12} sm={6} md={2}>
-                  <TextField
-                    label="Start Date"
-                    type="date"
-                    fullWidth
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <DateIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6} md={2}>
-                  <TextField
-                    label="End Date"
-                    type="date"
-                    fullWidth
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <DateIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6} md={2}>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Generate Report">
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleSearch}
-                        disabled={!reportType || !subType || loading}
-                        startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <SearchIcon />}
-                        size="small"
-                        sx={{ minWidth: 100 }}
-                      >
-                        {loading ? 'Loading...' : 'Generate'}
-                      </Button>
-                    </Tooltip>
-                    
-                    <Tooltip title="Clear All">
-                      <IconButton 
-                        color="secondary" 
-                        onClick={handleClear}
-                        size="small"
-                        sx={{ 
-                          bgcolor: 'secondary.main', 
-                          color: 'white',
-                          '&:hover': { bgcolor: 'secondary.dark' }
-                        }}
-                      >
-                        <ClearIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </Grid>
-
-                {error && (
-                  <Grid item xs={12}>
-                    <Alert severity="error" sx={{ borderRadius: 2 }}>
-                      {error}
-                    </Alert>
-                  </Grid>
-                )}
-              </Grid>
-            </CardContent>
-          </Card>
-        </Container>
+    <Container maxWidth="xl" sx={{ py: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+        <ReportIcon color="primary" sx={{ fontSize: 30 }} />
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            Sales reports
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Transaction detail and period totals by customer, route, driver, vehicle or city.
+          </Typography>
+        </Box>
       </Box>
 
-      {/* Scrollable Report Results Section */}
-      {showReport && reportData && (
-        <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-          <Container maxWidth="xl" sx={{ height: '100%', pb: 2 }}>
-            <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
-              <CardHeader 
-                title={`${reportType.toUpperCase()} ${subType.toUpperCase()} Report Results`}
-                action={
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Download PDF">
-                      <Button
-                        variant="contained"
-                        color="error"
-                        startIcon={<PictureAsPdfIcon />}
-                        onClick={handleDownloadPdf}
-                        size="small"
-                        disabled={!reportData || reportData.length === 0}
-                      >
-                        PDF
-                      </Button>
-                    </Tooltip>
-                    
-                    <Tooltip title="Download Excel">
-                      <Button
-                        variant="contained"
-                        color="success"
-                        startIcon={<DownloadIcon />}
-                        onClick={handleDownloadExcel}
-                        size="small"
-                        disabled={!reportData || reportData.length === 0}
-                      >
-                        Excel
-                      </Button>
-                    </Tooltip>
-                  </Box>
-                }
-                sx={{ 
-                  bgcolor: 'primary.main', 
-                  color: 'white',
-                  py: 1,
-                  flexShrink: 0,
-                  '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
-                }}
-              />
-              
-              {/* Report Info */}
-              <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>{reportData.length}</strong> records found | 
-                  Date Range: <strong>{startDate}</strong> to <strong>{endDate}</strong>
-                  {subTypeId && (
-                    <>
-                      {' | '}
-                      Filter: <strong>{subTypeIdOptions.find(opt => opt.value === subTypeId)?.label}</strong>
-                    </>
-                  )}
-                </Typography>
-              </Box>
-              
-              {/* Scrollable Table */}
-              <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-                {reportData.length === 0 ? (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    height: '200px' 
-                  }}>
-                    <Typography variant="h6" color="text.secondary">
-                      No data available for the selected criteria
-                    </Typography>
-                  </Box>
-                ) : (
-                  <TableContainer>
-                    <Table stickyHeader size="small">
-                      <TableHead>
-                        <TableRow>
-                          {getTableHeaders().map(header => (
-                            <TableCell 
-                              key={header} 
-                              sx={{ 
-                                fontWeight: 'bold', 
-                                bgcolor: '#f5f5f5',
-                                whiteSpace: 'nowrap',
-                                color: 'primary.main',
-                                py: 1,
-                                fontSize: '0.85rem'
-                              }}
-                            >
-                              <TableSortLabel>
-                                {header.replace(/_/g, ' ').toUpperCase()}
-                              </TableSortLabel>
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {reportData.map((row, index) => (
-                          <TableRow 
-                            key={index} 
-                            hover
-                            sx={{ '& td': { py: 0.5, fontSize: '0.85rem' } }}
-                          >
-                            {getTableHeaders().map(header => (
-                              <TableCell 
-                                key={header}
-                                sx={{
-                                  whiteSpace: 'nowrap',
-                                  maxWidth: '200px',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
-                                }}
-                              >
-                                {typeof row[header] === 'number' ? 
-                                  row[header].toLocaleString() : 
-                                  row[header]
-                                }
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </Box>
+      {/* Filters */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          {RANGE_PRESETS.map((preset) => (
+            <Chip
+              key={preset.label}
+              label={preset.label}
+              size="small"
+              onClick={() => setFilters((prev) => ({ ...prev, ...preset.range() }))}
+              variant="outlined"
+            />
+          ))}
+        </Box>
 
-              {/* Fixed Totals Row */}
-              {reportData && reportData.length > 0 && (
-                <Box sx={{ 
-                  borderTop: '2px solid #e0e0e0', 
-                  bgcolor: 'primary.main',
-                  flexShrink: 0 
-                }}>
-                  <Table size="small">
-                    <TableBody>
-                      <TableRow>
-                        {getTableHeaders().map(header => (
-                          <TableCell 
-                            key={header} 
-                            sx={{ 
-                              fontWeight: 'bold',
-                              color: 'white',
-                              bgcolor: 'primary.main',
-                              border: 'none',
-                              py: 1
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start' }}>
+          <TextField
+            label="From"
+            type="date"
+            size="small"
+            value={filters.startDate}
+            onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: 150 }}
+          />
+          <TextField
+            label="To"
+            type="date"
+            size="small"
+            value={filters.endDate}
+            onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: 150 }}
+          />
+
+          <TextField
+            select
+            label="Break down by"
+            size="small"
+            value={filters.groupBy}
+            onChange={(e) => setFilters((prev) => ({ ...prev, groupBy: e.target.value }))}
+            sx={{ minWidth: 160 }}
+          >
+            {REPORT_DIMENSIONS.map((option) => (
+              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select
+            label="Totals per"
+            size="small"
+            value={filters.period}
+            onChange={(e) => setFilters((prev) => ({ ...prev, period: e.target.value }))}
+            sx={{ minWidth: 150 }}
+            helperText={mode === 'detail' ? 'Applies to summary view' : ' '}
+          >
+            {REPORT_PERIODS.map((option) => (
+              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+            ))}
+          </TextField>
+
+          {dimension.master && (
+            <Autocomplete
+              size="small"
+              options={masterOptions}
+              loading={loadingOptions}
+              value={masterOptions.find((o) => o.id === dimensionFilter.value) ?? null}
+              onChange={(event, option) => setDimensionFilter({
+                key: dimension.filterKey,
+                value: option?.id ?? null,
+                label: option?.label ?? ''
+              })}
+              sx={{ minWidth: 240 }}
+              renderInput={(params) => (
+                <TextField {...params} label={`Only one ${dimension.label.toLowerCase()} (optional)`} />
+              )}
+            />
+          )}
+
+          <FormControlLabel
+            sx={{ mt: 0.5 }}
+            control={
+              <Switch
+                size="small"
+                checked={filters.excludeObsolete}
+                onChange={(e) => setFilters((prev) => ({ ...prev, excludeObsolete: e.target.checked }))}
+              />
+            }
+            label={<Typography variant="body2">Active customers only</Typography>}
+          />
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={mode}
+            onChange={(event, next) => next && setMode(next)}
+          >
+            <ToggleButton value="summary">Period totals</ToggleButton>
+            <ToggleButton value="detail">Transactions</ToggleButton>
+          </ToggleButtonGroup>
+
+          <Button
+            variant="contained"
+            startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <SearchIcon />}
+            onClick={handleGenerate}
+            disabled={loading}
+          >
+            {loading ? 'Generating…' : 'Generate'}
+          </Button>
+
+          <Button startIcon={<ClearIcon />} onClick={clear} disabled={loading}>
+            Reset
+          </Button>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Tooltip title={rows.length ? 'Download as PDF' : 'Generate a report first'}>
+            <span>
+              <Button
+                startIcon={<PdfIcon />}
+                onClick={() => exportReportToPdf(exportArgs())}
+                disabled={!rows.length}
+              >
+                PDF
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip title={rows.length ? 'Download as Excel' : 'Generate a report first'}>
+            <span>
+              <Button
+                startIcon={<ExcelIcon />}
+                onClick={() => exportReportToExcel(exportArgs())}
+                disabled={!rows.length}
+              >
+                Excel
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
+      </Paper>
+
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+
+      {drillFrom && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={<Button size="small" startIcon={<BackIcon />} onClick={backFromDrill}>Back to totals</Button>}
+        >
+          Transactions behind <strong>{drillFrom.label}</strong>
+        </Alert>
+      )}
+
+      {/* Headline figures */}
+      {totals && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          {[
+            ['Sales', count(totals.transactionCount)],
+            ['Birds', count(totals.birds)],
+            ['Weight', `${weight(totals.weight)} kg`],
+            ['Amount', money(totals.amount)],
+            ['Received', money(totals.payment)],
+            ['Pending', money(totals.pending)],
+            ['Avg rate', `${money(totals.averageRate)}/kg`]
+          ].map(([label, value]) => (
+            <Paper
+              key={label}
+              variant="outlined"
+              sx={{ px: 1.5, py: 1, minWidth: 118, display: 'flex', flexDirection: 'column' }}
+            >
+              <Typography variant="caption" color="text.secondary">{label}</Typography>
+              <Typography sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                {value}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
+      )}
+
+      {/* Results */}
+      {report && rows.length === 0 && !loading && (
+        <Alert severity="info">
+          No sales found between {report.startDate} and {report.endDate}
+          {report.appliedFilters?.length ? ` for ${report.appliedFilters.join(', ')}` : ''}.
+        </Alert>
+      )}
+
+      {rows.length > 0 && (
+        <Paper variant="outlined">
+          <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography sx={{ fontWeight: 600 }}>{report.title}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {report.startDate} to {report.endDate}
+            </Typography>
+            {report.appliedFilters?.map((filter) => (
+              <Chip key={filter} label={filter} size="small" variant="outlined" />
+            ))}
+            <Box sx={{ flexGrow: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              {count(rows.length)} rows
+            </Typography>
+          </Box>
+
+          <TableContainer sx={{ maxHeight: '60vh', overflowX: 'auto' }}>
+            <Table stickyHeader size="small">
+              <TableHead>
+                <TableRow>
+                  {columns.map((column) => (
+                    <TableCell
+                      key={column.key}
+                      sx={{
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        ...(column.numeric ? { textAlign: 'right' } : {})
+                      }}
+                    >
+                      {column.label}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {displayRows.map((row, index) => {
+                  const raw = rows[index];
+                  const clickable = mode === 'summary' && dimension.filterKey && raw.dimensionId;
+                  return (
+                    <TableRow
+                      key={`${raw.periodStart ?? raw.saleId ?? index}-${raw.dimensionId ?? index}`}
+                      hover
+                      onClick={clickable ? () => drillInto(raw) : undefined}
+                      sx={{ cursor: clickable ? 'pointer' : 'default' }}
+                    >
+                      {columns.map((column) => {
+                        const isBalance = column.key === 'closingBalance' || column.key === 'balanceAfter';
+                        const rawBalance = column.key === 'closingBalance'
+                          ? raw.closingBalance
+                          : raw.balanceAfter;
+                        return (
+                          <TableCell
+                            key={column.key}
+                            sx={{
+                              ...(column.numeric ? numericCellSx : { whiteSpace: 'nowrap' }),
+                              ...(isBalance
+                                ? { color: balanceColour(rawBalance), fontWeight: 600 }
+                                : {})
                             }}
                           >
-                            {header.includes('NAME') || header.includes('SUPPLIER') ? 
-                              'TOTALS' : 
-                              typeof reportData[0]?.[header] === 'number' ? 
-                                (calculateTotals()[header] || '').toLocaleString() : 
-                                ''
-                            }
+                            {isBalance && Number(rawBalance) > 50000 && (
+                              <RisingIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
+                            )}
+                            {row[column.key] ?? ''}
                           </TableCell>
-                        ))}
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </Box>
-              )}
-            </Card>
-          </Container>
-        </Box>
-      )}
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
 
-      {/* Loading State */}
-      {generating && (
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          height: '200px',
-          flexGrow: 1
-        }}>
-          <CircularProgress size={60} />
-          <Typography variant="h6" sx={{ ml: 2 }}>Generating report...</Typography>
-        </Box>
+                {totalsRow && (
+                  <TableRow sx={{ position: 'sticky', bottom: 0, bgcolor: 'action.selected' }}>
+                    {columns.map((column) => (
+                      <TableCell
+                        key={column.key}
+                        sx={{
+                          fontWeight: 700,
+                          borderTop: '2px solid',
+                          borderTopColor: 'divider',
+                          ...(column.numeric ? numericCellSx : { whiteSpace: 'nowrap' })
+                        }}
+                      >
+                        {totalsRow[column.key] ?? ''}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {mode === 'summary' && dimension.filterKey && (
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                Click any row to see the transactions behind it.
+              </Typography>
+            </Box>
+          )}
+        </Paper>
       )}
-    </Box>
+    </Container>
   );
 };
 
