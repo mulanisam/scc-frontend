@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Container, 
-  Paper, 
   Tabs, 
   Tab, 
   Box, 
@@ -17,7 +16,6 @@ import {
   CardHeader,
   Chip,
   InputAdornment,
-  Divider
 } from '@mui/material';
 import {
   TrendingUp as TradingIcon,
@@ -27,7 +25,6 @@ import {
    Person as PartyIcon,
   Business as SupplierIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { 
   getParties, 
   getSuppliers, 
@@ -35,6 +32,7 @@ import {
   createPaymentEntry, 
   getVehiclesByParty 
 } from '../service/TradingService';
+import { calculateAmount } from '../../utils/businessRules';
 
 
 function TabPanel(props) {
@@ -58,7 +56,6 @@ function TabPanel(props) {
 
 
 function TradingPage() {
-  const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
   const [parties, setParties] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -96,11 +93,11 @@ function TradingPage() {
     description: ''
   });
 
-  useEffect(() => {
-    fetchInitialData();
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
   }, []);
 
-  const fetchInitialData = async () => {
+  const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
       const [partiesRes, suppliersRes] = await Promise.all([
@@ -114,11 +111,11 @@ function TradingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showSnackbar]);
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -139,13 +136,13 @@ function TradingPage() {
       }
     }
 
-    // Calculate amount when kilograms or rate changes
-    if ((field === 'kilograms' || field === 'rate')) {
-      const weight = field === 'kilograms' ? parseFloat(value) : parseFloat(salesData.kilograms);
-      const rate = field === 'rate' ? parseFloat(value) : parseFloat(salesData.rate);
-      if (weight && rate && !isNaN(weight) && !isNaN(rate)) {
-        setSalesData(prev => ({ ...prev, amount: (weight * rate).toFixed(2) }));
-      }
+    // Recalculate the amount whenever weight or rate changes. This runs
+    // unconditionally so clearing a field clears the amount rather than
+    // leaving the previous figure on screen.
+    if (field === 'kilograms' || field === 'rate') {
+      const weight = field === 'kilograms' ? value : salesData.kilograms;
+      const rate = field === 'rate' ? value : salesData.rate;
+      setSalesData(prev => ({ ...prev, amount: calculateAmount(weight, rate) }));
     }
   };
 

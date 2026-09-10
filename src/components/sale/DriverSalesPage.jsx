@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Grid,
@@ -28,16 +28,17 @@ import {
   ShoppingCart as SaleIcon,
   LocalAtm as PaymentIcon
 } from '@mui/icons-material';
-import { getRoutes, getCustomersByRoute, getVehicles, getDrivers } from '../service/SalesService';
+import { getRoutes, getCustomersByRoute, getVehicles, getDrivers, createSalesEntry } from '../service/SalesService';
 import UserService from '../service/UserService';
 import { Navigate } from 'react-router-dom';
-import { getCompanyConfig } from '../../config/companyConfig';
+import { useAuth } from '../../auth/AuthContext';
+import { calculateAmount, calculatePending } from '../../utils/businessRules';
 
 const DriverSalesPage = () => {
-  const companyConfig = getCompanyConfig();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isDriver, setIsDriver] = useState(false);
-  
+  // Route access is enforced by RequireAuth in App.js; this component only
+  // needs the identity to decide when to load its data.
+  const { isAuthenticated, isDriver } = useAuth();
+
   // Session Configuration (set once)
   const [sessionConfig, setSessionConfig] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -90,46 +91,11 @@ const DriverSalesPage = () => {
     }
   `;
 
-  useEffect(() => {
-    const checkAuth = () => {
-      const authenticated = UserService.isAuthenticated();
-      const driver = UserService.isDriver();
-      setIsAuthenticated(authenticated);
-      setIsDriver(driver);
-    };
-
-    checkAuth();
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
   }, []);
 
-  useEffect(() => {
-    if (isAuthenticated && isDriver) {
-      fetchInitialData();
-    }
-  }, [isAuthenticated, isDriver]);
-
-  useEffect(() => {
-    if (sessionConfig.route) {
-      fetchCustomers();
-    }
-  }, [sessionConfig.route]);
-
-  useEffect(() => {
-    if (saleData.rate && saleData.kilograms) {
-      const amount = Math.round((parseFloat(saleData.rate) * parseFloat(saleData.kilograms)) / 10) * 10;
-      setSaleData(prev => ({ ...prev, amount }));
-    }
-  }, [saleData.rate, saleData.kilograms]);
-
-  useEffect(() => {
-    if (saleData.amount && saleData.payment) {
-      const pending = Math.round((parseFloat(saleData.amount) - parseFloat(saleData.payment)) / 10) * 10;
-      setSaleData(prev => ({ ...prev, pending }));
-    }
-  }, [saleData.amount, saleData.payment]);
-
-  const fetchInitialData = async () => {
+  const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
       const [routesResponse, vehiclesResponse, driversResponse] = await Promise.all([
@@ -146,9 +112,9 @@ const DriverSalesPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showSnackbar]);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       const response = await getCustomersByRoute(sessionConfig.route);
       const filteredCustomers = (response.data || []).filter(customer => !customer.obsolete);
@@ -156,11 +122,32 @@ const DriverSalesPage = () => {
     } catch (error) {
       showSnackbar('Error loading customers', 'error');
     }
-  };
+  }, [sessionConfig.route, showSnackbar]);
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
+  useEffect(() => {
+    if (isAuthenticated && isDriver) {
+      fetchInitialData();
+    }
+  }, [isAuthenticated, isDriver, fetchInitialData]);
+
+  useEffect(() => {
+    if (sessionConfig.route) {
+      fetchCustomers();
+    }
+  }, [sessionConfig.route, fetchCustomers]);
+
+  // Amount and pending are derived from rate/kilograms/payment. These run
+  // unconditionally so that clearing a field recalculates instead of leaving
+  // a stale value on screen.
+  useEffect(() => {
+    const amount = calculateAmount(saleData.kilograms, saleData.rate);
+    setSaleData(prev => (prev.amount === amount ? prev : { ...prev, amount }));
+  }, [saleData.rate, saleData.kilograms]);
+
+  useEffect(() => {
+    const pending = calculatePending(saleData.amount, saleData.payment);
+    setSaleData(prev => (prev.pending === pending ? prev : { ...prev, pending }));
+  }, [saleData.amount, saleData.payment]);
 
   const handleSessionConfigSubmit = () => {
     if (!sessionConfig.date || !sessionConfig.route || !sessionConfig.vehicle || !sessionConfig.driver) {
@@ -218,26 +205,18 @@ const DriverSalesPage = () => {
         sendSms: false
       };
 
-      // Use the same service as regular sales entry
-      const response = await fetch('/api/sales', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(salesEntry)
-      });
+      // Goes through the shared sales service so the request carries the API
+      // base URL and auth header. This previously posted to a relative
+      // "/api/sales", which is not an endpoint this backend serves, so driver
+      // sales always failed.
+      await createSalesEntry(salesEntry);
 
-      if (response.ok) {
-        showSnackbar('Sale recorded successfully!', 'success');
-        setTodaySales(prev => prev + 1);
-        setTodayAmount(prev => prev + saleData.amount);
-        handleClearSale();
-      } else {
-        throw new Error('Failed to submit sale');
-      }
+      showSnackbar('Sale recorded successfully!', 'success');
+      setTodaySales(prev => prev + 1);
+      setTodayAmount(prev => prev + saleData.amount);
+      handleClearSale();
     } catch (error) {
-      showSnackbar('Error recording sale. Please try again.', 'error');
+      showSnackbar(error.message || 'Error recording sale. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }

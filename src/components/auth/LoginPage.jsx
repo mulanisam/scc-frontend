@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import UserService from '../service/UserService';
+import { useAuth } from '../../auth/AuthContext';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -27,6 +28,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,18 +37,21 @@ function LoginPage() {
 
     try {
       const userData = await UserService.login(email, password);
-      
+
       if (userData.token) {
-        localStorage.setItem('token', userData.token);
-        localStorage.setItem('role', userData.role);
-        window.dispatchEvent(new Event('storage'));
-        navigate('/dashboard', { replace: true }); // Use replace to prevent back navigation
+        login({
+          token: userData.token,
+          role: userData.role,
+          username: userData.username || email,
+          driverInfo: userData.driverInfo
+        });
+        // Send them to "/", which routes each role to its own landing page
+        // instead of assuming everyone belongs on the dashboard.
+        navigate('/', { replace: true });
       } else {
         setError(userData.message || 'Login failed');
-        navigate('/login', { replace: true });
       }
     } catch (error) {
-      console.error(error);
       setError(error.message || 'An error occurred during login');
     } finally {
       setLoading(false);

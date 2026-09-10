@@ -3,7 +3,6 @@ import {
   Box,
   TextField,
   Button,
-  Typography,
   Grid,
   MenuItem,
   Alert,
@@ -14,14 +13,9 @@ import {
   Divider,
   InputAdornment
 } from '@mui/material';
-import { 
-  PostAdd as SingleIcon,
-  CalendarToday as DateIcon,
-  Person as PersonIcon,
-  LocalShipping as VehicleIcon,
-  Scale as WeightIcon
-} from '@mui/icons-material';
+import { PostAdd as SingleIcon, CalendarToday as DateIcon } from '@mui/icons-material';
 import { createSingleSale, getRoutes, getDrivers, getVehicles, getCustomersByRoute } from '../service/SalesService';
+import { calculateAmount } from '../../utils/businessRules';
 
 const SingleSaleEntry = () => {
   const [loading, setLoading] = useState(false);
@@ -58,8 +52,10 @@ const SingleSaleEntry = () => {
     }
   }, [formData.routeId]);
 
+  // Amount is derived from weight x rate, rounded to the nearest ₹10.
   useEffect(() => {
-    calculateAmount();
+    const amount = calculateAmount(formData.kilograms, formData.rate);
+    setFormData(prev => ({ ...prev, amount: amount.toString() }));
   }, [formData.kilograms, formData.rate]);
 
   const loadMasterData = async () => {
@@ -84,13 +80,6 @@ const SingleSaleEntry = () => {
     } catch (err) {
       setError('Failed to load customers');
     }
-  };
-
-  const calculateAmount = () => {
-    const kg = parseFloat(formData.kilograms) || 0;
-    const rate = parseFloat(formData.rate) || 0;
-    const amount = Math.round(kg * rate);
-    setFormData(prev => ({ ...prev, amount: amount.toString() }));
   };
 
   const handleChange = (e) => {

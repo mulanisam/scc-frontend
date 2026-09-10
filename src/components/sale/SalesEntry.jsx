@@ -1,14 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Box, 
-  Container,
-  Paper, 
-  Tabs, 
-  Tab, 
-  Typography,
-  Card,
-  CardContent
-} from '@mui/material';
+import { Box, Container, Tabs, Tab, Card } from '@mui/material';
 import { 
   GridOn as BulkIcon, 
   PostAdd as SingleIcon, 
@@ -42,7 +33,7 @@ function a11yProps(index) {
   };
 }
 
-const SalesEntryTabs = () => {
+const SalesEntry = () => {
   const [activeTab, setActiveTab] = useState(0);
 
   const handleTabChange = (event, newValue) => {
@@ -133,4 +124,4 @@ const SalesEntryTabs = () => {
   );
 };
 
-export default SalesEntryTabs;
+export default SalesEntry;

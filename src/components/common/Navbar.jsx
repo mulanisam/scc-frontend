@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -33,41 +33,21 @@ import {
   AccountBalanceWallet as LedgerIcon
 } from '@mui/icons-material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import UserService from '../service/UserService';
+import { useAuth } from '../../auth/AuthContext';
 import { getCompanyConfig } from '../../config/companyConfig';
 
 function Navbar() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isDriver, setIsDriver] = useState(false);
+  const { isAuthenticated, isAdmin, isDriver, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
-  
+
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   // Get company configuration
   const companyConfig = getCompanyConfig();
-
-  useEffect(() => {
-    const checkAuth = () => {
-      const authenticated = UserService.isAuthenticated();
-      const admin = UserService.adminOnly();
-      const driver = UserService.isDriver();
-      
-      console.log('Navbar auth check:', { authenticated, admin, driver }); // Debug log
-      
-      setIsAuthenticated(authenticated);
-      setIsAdmin(admin);
-      setIsDriver(driver);
-    };
-
-    checkAuth();
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
-  }, []);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -82,16 +62,8 @@ function Navbar() {
   };
 
   const handleLogout = () => {
-    const confirmLogout = window.confirm('Are you sure you want to logout?');
-    if (confirmLogout) {
-      UserService.logout();
-      localStorage.clear();
-      
-      setIsAuthenticated(false);
-      setIsAdmin(false);
-      setIsDriver(false);
-      
-      window.dispatchEvent(new Event('storage'));
+    if (window.confirm('Are you sure you want to logout?')) {
+      logout();
       navigate('/login', { replace: true });
     }
     handleProfileMenuClose();

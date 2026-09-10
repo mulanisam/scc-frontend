@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Paper,
@@ -29,14 +29,11 @@ import {
   Select,
   MenuItem,
   TableSortLabel,
-  useTheme,
-  useMediaQuery,
   Chip,
   Card,
   CardContent,
   CardHeader,
   Tooltip,
-  Fab,
   Badge,
   CircularProgress
 } from '@mui/material';
@@ -73,8 +70,6 @@ const baseDataTypes = [
 const adminDataTypes = ['parties', 'partyVehicles'];
 
 export default function MasterData() {
-  const theme = useTheme();
-  const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const allTabs = UserService.adminOnly()
     ? [...baseDataTypes, ...adminDataTypes]
     : baseDataTypes;
@@ -112,9 +107,38 @@ export default function MasterData() {
     }
   `;
 
+  // Defined before the effects below: `const` bindings are in the temporal
+  // dead zone until their declaration runs, and effect dependency arrays are
+  // evaluated during render, at the point useEffect is called.
+  const showSnackbar = useCallback((msg, sev) => {
+    setSnackbarMessage(msg);
+    setSnackbarSeverity(sev);
+    setSnackbarOpen(true);
+  }, []);
+
+  const fetchData = useCallback(async (type) => {
+    setLoading(true);
+    try {
+      const res = await getData(type);
+      let md = res.data;
+      if (type === 'routes') md = md.map(r => ({ ...r, cities: r.cities.map(c => c.name).join(', ') }));
+      if (type === 'customers') md = md.map(c => ({ ...c, city: c.city.name, route: c.city.route.name }));
+      if (type === 'cities') md = md.map(({ customers, ...c }) => ({ ...c, route: c.route.name }));
+      if (type === 'partyVehicles') md = md.map(pv => ({ ...pv, party: pv.party.name }));
+      if (type === 'parties') {
+        md = md.map(p => ({ ...p, partyVehicles: p.partyVehicles ? p.partyVehicles.map(pv => pv.vehicleNumber).join(', ') : '' }));
+      }
+      setData(md);
+    } catch (error) {
+      showSnackbar(`Error fetching ${type}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showSnackbar]);
+
   useEffect(() => {
     fetchData(dataType);
-  }, [dataType]);
+  }, [dataType, fetchData]);
 
   useEffect(() => {
     // Filter and sort data
@@ -168,32 +192,6 @@ export default function MasterData() {
       setExpirationMessage('');
     }
   }, [data, dataType]);
-
-  const fetchData = async (type) => {
-    setLoading(true);
-    try {
-      const res = await getData(type);
-      let md = res.data;
-      if (type === 'routes') md = md.map(r => ({ ...r, cities: r.cities.map(c => c.name).join(', ') }));
-      if (type === 'customers') md = md.map(c => ({ ...c, city: c.city.name, route: c.city.route.name }));
-      if (type === 'cities') md = md.map(({ customers, ...c }) => ({ ...c, route: c.route.name }));
-      if (type === 'partyVehicles') md = md.map(pv => ({ ...pv, party: pv.party.name }));
-      if (type === 'parties') {
-        md = md.map(p => ({ ...p, partyVehicles: p.partyVehicles ? p.partyVehicles.map(pv => pv.vehicleNumber).join(', ') : '' }));
-      }
-      setData(md);
-    } catch (error) {
-      showSnackbar(`Error fetching ${type}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showSnackbar = (msg, sev) => {
-    setSnackbarMessage(msg);
-    setSnackbarSeverity(sev);
-    setSnackbarOpen(true);
-  };
 
   const handleTabChange = (e, idx) => {
     setTabIndex(idx);

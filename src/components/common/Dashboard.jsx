@@ -6,7 +6,6 @@ import {
     Card,
     CardContent,
     CardHeader,
-    Divider,
     TextField,
     Box,
     Paper,
@@ -147,9 +146,9 @@ const Dashboard = () => {
         setSelectedDate(event.target.value);
     };
 
-    const handleRefresh = () => {
-        fetchData();
-    };
+   const handleRefresh = async () => {
+    await fetchData();
+};
 
     // Format metric values
     const formatMetricValue = (key, value) => {

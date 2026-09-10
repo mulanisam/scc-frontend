@@ -1,66 +1,45 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../../config/axiosConfig.js'
+import apiClient from './api.js';
 
-const getToken = () => localStorage.getItem('token');
+/**
+ * Sales API.
+ *
+ * All requests go through `apiClient`, which attaches the bearer token and
+ * normalises errors. Callers receive the raw axios response and read `.data`.
+ */
 
-const getRoutes = () => {
-  return axios.get(`${API_BASE_URL}/user/routes`, {
-    headers: { Authorization: `Bearer ${getToken()}` }
-  });
-};
+const getRoutes = () => apiClient.get('/user/routes');
 
-const getDrivers = () => {
-  return axios.get(`${API_BASE_URL}/user/drivers`, {
-    headers: { Authorization: `Bearer ${getToken()}` }
-  });
-};
+const getDrivers = () => apiClient.get('/user/drivers');
 
-const getVehicles = () => {
-  return axios.get(`${API_BASE_URL}/user/vehicles`, {
-    headers: { Authorization: `Bearer ${getToken()}` }
-  });
-};
+const getVehicles = () => apiClient.get('/user/vehicles');
 
-const getCustomersByRoute = (routeId) => {
-  return axios.get(`${API_BASE_URL}/user/customers/byRoute/${routeId}`, {
-    headers: { Authorization: `Bearer ${getToken()}` }
-  });
-};
- 
+const getCustomersByRoute = (routeId) =>
+  apiClient.get(`/user/customers/byRoute/${routeId}`);
 
-const createSalesEntry = (salesEntry) => {
-  return axios.post(`${API_BASE_URL}/user/sales/bulk`, salesEntry, {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getToken()}`
-    }
-  });
-};
+const createSalesEntry = (salesEntry) =>
+  apiClient.post('/user/sales/bulk', salesEntry);
 
-// NEW: Create single sale entry
-const createSingleSale = (saleData) => {
-  return axios.post(`${API_BASE_URL}/user/sales/single`, saleData, {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getToken()}`
-    }
-  });
-};
+const createSingleSale = (saleData) =>
+  apiClient.post('/user/sales/single', saleData);
 
-const saveSaleDetailsData = (salesDetails) => {
-  return axios.post(`${API_BASE_URL}/user/sales/saveDetails`, salesDetails, {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getToken()}`
-    }
+const saveSaleDetailsData = (salesDetails) =>
+  apiClient.post('/user/sales/saveDetails', salesDetails);
+
+const getSaleDetailsByCriteria = (date, route, vehicle, driver) =>
+  apiClient.get('/user/sales/saleDetails', {
+    params: { date, route, vehicle, driver }
   });
-};
- 
-const getSaleDetailsByCriteria  = (date, route, vehicle, driver) => {
-  return axios.get(`${API_BASE_URL}/user/sales/saleDetails`, { params: { date, route, vehicle, driver } },{
-    headers: { Authorization: `Bearer ${getToken()}` }
+
+/**
+ * What the server knows about a date and route before we submit: whether a trip
+ * is already recorded (a possible duplicate) and when the route last had a sale
+ * (so an earlier date can be confirmed as a backdated entry).
+ */
+const getTripContext = (date, routeId) =>
+  apiClient.get('/user/sales/tripContext', {
+    params: { date, route: routeId }
   });
-};
+
 export {
   getRoutes,
   getDrivers,
@@ -69,5 +48,6 @@ export {
   createSingleSale,
   getVehicles,
   getSaleDetailsByCriteria,
-  saveSaleDetailsData
+  saveSaleDetailsData,
+  getTripContext
 };

@@ -14,11 +14,6 @@ export const fetchSuppliers = async () => {
     throw error;
   }
 };
-const fetchSupplierById = (supplierId) => {
-  return axios.get(`${API_BASE_URL}/user/suppliers/${supplierId}`, {
-    headers: { Authorization: `Bearer ${getToken()}` }
-  });
-};
 export const fetchVehicles = async () => {
   try {
     const response = await axios.get(`${API_BASE_URL}/user/vehicles`, {

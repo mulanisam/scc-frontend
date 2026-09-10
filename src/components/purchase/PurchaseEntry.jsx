@@ -14,7 +14,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Paper,
   Box,
   Table,
   TableBody,
@@ -48,6 +47,7 @@ import {
   MonetizationOn as ExpenseIcon
 } from '@mui/icons-material';
 import { fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase, fetchPurchaseDetails, submitPayment } from '../service/PurchaseService';
+import { calculateAmount, calculateTotalExpenses } from '../../utils/businessRules';
 
 const PurchaseEntryPage = () => {
   const [tableRows, setTableRows] = useState([{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]);
@@ -136,20 +136,25 @@ const PurchaseEntryPage = () => {
 
   const handleTableChange = (index, field, value) => {
     const updatedRows = [...tableRows];
-    updatedRows[index][field] = value;
+    // Copy the row rather than mutating it in place: the objects are shared
+    // with the previous state, so mutating them edits history too.
+    const row = { ...updatedRows[index], [field]: value };
+
     if (field === 'rate' || field === 'kilograms') {
-      const rate = parseFloat(updatedRows[index].rate) || 0;
-      const kilograms = parseFloat(updatedRows[index].kilograms) || 0;
-      updatedRows[index].amount = (rate * kilograms).toFixed(2);
+      row.amount = calculateAmount(row.kilograms, row.rate);
     }
+
+    updatedRows[index] = row;
     setTableRows(updatedRows);
     setFormData({ ...formData, dcDetails: updatedRows });
   };
 
-  const calculateTotalAmount = () => {
-    const total = parseFloat(formData.driverExpense || 0) + parseFloat(formData.diesel || 0) + parseFloat(formData.hamali || 0);
-    return isNaN(total) ? 0 : total;
-  };
+  const calculateTotalAmount = () =>
+    calculateTotalExpenses({
+      driverExpense: formData.driverExpense,
+      diesel: formData.diesel,
+      hamali: formData.hamali
+    });
 
   const calculateTotal = (field) => {
     return tableRows.reduce((total, row) => total + (parseFloat(row[field]) || 0), 0);

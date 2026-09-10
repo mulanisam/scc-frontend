@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Container,
   Grid,
@@ -11,20 +11,15 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Typography,
   Snackbar,
   Alert,
-  FormControlLabel,
-  Checkbox,
   Box,
   CircularProgress,
   InputAdornment,
-  Chip,
   Card,
   CardContent,
   CardHeader,
-  Divider,
   Switch
 } from '@mui/material';
 import {
@@ -36,14 +31,15 @@ import {
   Route as RouteIcon,
   LocalShipping as VehicleIcon,
   Person as DriverIcon,
-  Sms as SmsIcon,
-  ShoppingCart as SaleIcon,
   Agriculture as FarmIcon,
   Message as MessageIcon
 } from '@mui/icons-material';
-import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getSaleDetailsByCriteria } from '../service/SalesService';
+import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getTripContext } from '../service/SalesService';
 import UserService from '../service/UserService';
 import { Navigate } from 'react-router-dom';
+import { calculateAmount, calculatePending, reconcileBirds, isCompleteSaleLine } from '../../utils/businessRules';
+import { validateSaleDate, checkDuplicateEntry, buildSaleSummary } from '../../utils/saleValidation';
+import SaleSubmitDialog from './SaleSubmitDialog';
 
 // Constants
 const INITIAL_DATE = () => new Date().toISOString().slice(0, 10);
@@ -54,7 +50,6 @@ const VALIDATION_MESSAGES = {
   SUBMIT_ERROR: 'Error creating sales entry. Please try again.'
 };
 
-const roundToNearestTen = (amount) => Math.round(amount / 10) * 10;
 
 const createInitialSalesData = (customers) =>
   customers
@@ -73,6 +68,83 @@ const createInitialSalesData = (customers) =>
       description: '',
       obsolete: customer.obsolete
     }));
+
+// Column order used by the grid and by keyboard navigation.
+const EDITABLE_FIELDS = ['birds', 'kilograms', 'rate', 'payment', 'description'];
+
+const balanceColor = (balance) => {
+  if (balance > 50000) return 'error.dark';
+  if (balance > 20000) return 'warning.dark';
+  return 'inherit';
+};
+
+const cellInputSx = { '& .MuiInputBase-input': { fontSize: '0.85rem', py: '6px' } };
+
+/**
+ * One customer row.
+ *
+ * Memoised so that typing in a cell re-renders only that row: `onChange`
+ * replaces a single entry in the sales array, leaving every other row's `row`
+ * object identity intact.
+ */
+const SaleRow = React.memo(function SaleRow({ customer, row, rowIndex, salesIndex, dimmed, onChange }) {
+  const numericCell = (field, width) => (
+    <TableCell>
+      <TextField
+        size="small"
+        type="number"
+        value={row?.[field] ?? ''}
+        onChange={(e) => onChange(salesIndex, field, e.target.value)}
+        sx={{ width, ...cellInputSx }}
+        inputProps={{ 'data-row': rowIndex, 'data-field': field }}
+      />
+    </TableCell>
+  );
+
+  return (
+    <TableRow hover sx={{ bgcolor: dimmed ? 'action.hover' : 'inherit', '& td': { py: 0.5 } }}>
+      <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+        {customer.name}
+      </TableCell>
+      <TableCell sx={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{customer.city?.name}</TableCell>
+
+      {numericCell('birds', 80)}
+      {numericCell('kilograms', 90)}
+      {numericCell('rate', 90)}
+
+      <TableCell sx={{ fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' }}>
+        ₹{(row?.amount ?? 0).toLocaleString('en-IN')}
+      </TableCell>
+
+      {numericCell('payment', 100)}
+
+      <TableCell sx={{ fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' }}>
+        ₹{(row?.pending ?? 0).toLocaleString('en-IN')}
+      </TableCell>
+
+      <TableCell
+        sx={{
+          fontSize: '0.85rem',
+          textAlign: 'right',
+          color: balanceColor(row?.balanceAmount ?? 0),
+          fontWeight: (row?.balanceAmount ?? 0) > 50000 ? 700 : 400
+        }}
+      >
+        ₹{(row?.balanceAmount ?? 0).toLocaleString('en-IN')}
+      </TableCell>
+
+      <TableCell>
+        <TextField
+          size="small"
+          value={row?.description ?? ''}
+          onChange={(e) => onChange(salesIndex, 'description', e.target.value)}
+          sx={{ width: 140, ...cellInputSx }}
+          inputProps={{ 'data-row': rowIndex, 'data-field': 'description' }}
+        />
+      </TableCell>
+    </TableRow>
+  );
+});
 
 const validateFormData = (formData) => {
   const errors = {};
@@ -126,42 +198,150 @@ const SalesEntry = () => {
     return Object.keys(errors).length === 0;
   }, [formData]);
 
-  const filteredCustomersWithSales = useMemo(() => {
-    if (!searchQuery.trim()) {
+  // Row ORDER depends only on the customer list and the search box. It
+  // deliberately does not depend on salesData: including it rebuilt this array
+  // on every keystroke, which re-rendered all ~100 rows (five inputs each)
+  // instead of just the cell being typed into.
+  const orderedCustomers = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+
+    if (!query) {
       return masterData.customers.map((customer, index) => ({
         customer,
         salesIndex: index,
-        salesData: salesData[index]
+        matches: true
       }));
     }
 
-    const query = searchQuery.toLowerCase().trim();
     return masterData.customers
       .map((customer, index) => ({
         customer,
         salesIndex: index,
-        salesData: salesData[index],
         matches: customer.name.toLowerCase().includes(query) ||
                 customer.city.name.toLowerCase().includes(query)
       }))
-      .sort((a, b) => {
-        if (a.matches && !b.matches) return -1;
-        if (!a.matches && b.matches) return 1;
-        return 0;
-      });
-  }, [masterData.customers, salesData, searchQuery]);
+      .sort((a, b) => Number(b.matches) - Number(a.matches));
+  }, [masterData.customers, searchQuery]);
+
+  // Only lines that will actually be submitted. The server reconciles birds
+  // against the lines it receives, so totalling rows that are never sent would
+  // show a balanced load on screen and then be rejected on submit.
+  const completedLines = useMemo(
+    () => salesData.filter(isCompleteSaleLine),
+    [salesData]
+  );
 
   const totals = useMemo(() =>
-    salesData.reduce((acc, data) => ({
+    completedLines.reduce((acc, data) => ({
       birds: acc.birds + Number(data.birds || 0),
       kilograms: acc.kilograms + Number(data.kilograms || 0),
-      rate: acc.rate + Number(data.rate || 0),
       amount: acc.amount + Number(data.amount || 0),
       payment: acc.payment + Number(data.payment || 0),
       pending: acc.pending + Number(data.pending || 0)
-    }), { birds: 0, kilograms: 0, rate: 0, amount: 0, payment: 0, pending: 0 }),
-    [salesData]
+    }), { birds: 0, kilograms: 0, amount: 0, payment: 0, pending: 0 }),
+    [completedLines]
   );
+
+  // What the server already knows about this date and route. Fetched rather
+  // than guessed: the browser cannot see what is already saved.
+  const [tripContext, setTripContext] = useState(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !formData.selectedRoute || !formData.date) {
+      setTripContext(null);
+      return undefined;
+    }
+
+    let active = true;
+    getTripContext(formData.date, formData.selectedRoute)
+      .then((response) => {
+        if (active) setTripContext(response.data || null);
+      })
+      .catch(() => {
+        // A failed lookup must not block entry: the server revalidates on
+        // submit regardless, so the warnings are a convenience, not the gate.
+        if (active) setTripContext(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [formData.date, formData.selectedRoute, isAuthenticated]);
+
+  const dateCheck = useMemo(
+    () => validateSaleDate({
+      saleDate: formData.date,
+      lastSaleDate: tripContext?.lastSaleDate
+    }),
+    [formData.date, tripContext]
+  );
+
+  const duplicateCheck = useMemo(() => checkDuplicateEntry(tripContext), [tripContext]);
+
+  // Every bird loaded must be sold, dead, or returned to the farm.
+  const birdCheck = useMemo(() => reconcileBirds({
+    totalBirds: formData.totalBirds,
+    soldBirds: totals.birds,
+    mortality: formData.mortality,
+    returnToFarm: formData.returnToFarm
+  }), [formData.totalBirds, formData.mortality, formData.returnToFarm, totals.birds]);
+
+  // Figures shown on the review screen, with ids resolved to the names the
+  // operator recognises rather than the raw selections.
+  const reviewSummary = useMemo(() => buildSaleSummary({
+    formData,
+    lines: completedLines,
+    totals,
+    birdCheck,
+    labels: {
+      route: masterData.routes.find(r => r.id === formData.selectedRoute)?.name ?? '',
+      vehicle: masterData.vehicles.find(v => v.id === formData.selectedVehicle)?.vehicleNo ?? '',
+      driver: masterData.drivers.find(d => d.id === formData.selectedDriver)?.name ?? ''
+    }
+  }), [formData, completedLines, totals, birdCheck, masterData]);
+
+  const gridRef = useRef(null);
+
+  /**
+   * Spreadsheet-style navigation for the entry grid: Enter / Arrow Down move
+   * down a column, Arrow Up moves back, Arrow Left/Right step across columns.
+   * Tab keeps its native row-wise behaviour.
+   */
+  const handleGridKeyDown = useCallback((event) => {
+    const { key, target } = event;
+    const rowIndex = Number(target.dataset?.row);
+    const field = target.dataset?.field;
+    if (!field || Number.isNaN(rowIndex)) return;
+
+    const vertical = key === 'Enter' || key === 'ArrowDown' ? 1 : key === 'ArrowUp' ? -1 : 0;
+    const horizontal = key === 'ArrowRight' ? 1 : key === 'ArrowLeft' ? -1 : 0;
+    if (!vertical && !horizontal) return;
+
+    // Let arrow keys move the caret inside a text field with content in it,
+    // rather than hijacking them for navigation.
+    if (horizontal && target.type !== 'number' && target.value) return;
+
+    let nextRow = rowIndex;
+    let nextField = field;
+
+    if (vertical) {
+      nextRow = rowIndex + vertical;
+    } else {
+      const col = EDITABLE_FIELDS.indexOf(field) + horizontal;
+      if (col < 0 || col >= EDITABLE_FIELDS.length) return;
+      nextField = EDITABLE_FIELDS[col];
+    }
+
+    const next = gridRef.current?.querySelector(
+      `input[data-row="${nextRow}"][data-field="${nextField}"]`
+    );
+    if (!next) return;
+
+    event.preventDefault();
+    next.focus();
+    next.select?.();
+  }, []);
 
   const showSnackbar = useCallback((message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -184,26 +364,16 @@ const SalesEntry = () => {
     setSalesData(prevSalesData => {
       try {
         const newData = [...prevSalesData];
-        newData[index] = { ...newData[index], [field]: value };
-        
-        if (field === 'rate' || field === 'kilograms') {
-          const rate = Number(newData[index].rate) || 0;
-          const kilograms = Number(newData[index].kilograms) || 0;
-          newData[index].amount = roundToNearestTen(rate * kilograms);
+        const row = { ...newData[index], [field]: value };
 
-          if(newData[index].amount > 0 && (newData[index].payment !== '' || newData[index].payment !== null)){
-             const payment = Number(newData[index].payment) || 0;
-             const amount = Number(newData[index].amount) || 0;
-            newData[index].pending = roundToNearestTen(amount - payment);
+        // Amount and pending are always derived, so clearing a field
+        // recalculates rather than leaving a stale figure in the row.
+        if (field === 'rate' || field === 'kilograms') {
+          row.amount = calculateAmount(row.kilograms, row.rate);
         }
-      }
-        
-        if (field === 'payment' || field === 'amount') {
-          const amount = Number(newData[index].amount) || 0;
-          const payment = Number(newData[index].payment) || 0;
-          newData[index].pending = roundToNearestTen(amount - payment);
-        }
-        
+        row.pending = calculatePending(row.amount, row.payment);
+
+        newData[index] = row;
         return newData;
       } catch (error) {
         console.error('Error updating sales data:', error);
@@ -264,7 +434,13 @@ const SalesEntry = () => {
     fetchCustomers();
   }, [formData.selectedRoute, isAuthenticated, showSnackbar]);
 
-  const handleSubmit = async () => {
+  /**
+   * Opens the review screen. Cheap, local problems are reported straight away;
+   * anything the operator needs to weigh up — a duplicate trip, a backdated
+   * entry — is shown on the review screen so they can see it alongside the
+   * figures before deciding.
+   */
+  const handleReview = () => {
     const errors = validateFormData(formData);
     if (Object.keys(errors).length > 0) {
       setUiState(prev => ({ ...prev, errors }));
@@ -272,16 +448,30 @@ const SalesEntry = () => {
       return;
     }
 
-    const completedSalesData = salesData.filter(customerData =>
-      customerData.birds !== '' &&
-      customerData.kilograms !== '' &&
-      customerData.rate !== ''
-    );
-
-    if (completedSalesData.length === 0) {
+    if (completedLines.length === 0) {
       showSnackbar('Please add at least one sale entry', 'error');
       return;
     }
+
+    if (dateCheck.blocked) {
+      showSnackbar(dateCheck.message, 'error');
+      return;
+    }
+
+    if (!birdCheck.balanced) {
+      showSnackbar(
+        `Bird count does not balance: ${birdCheck.totalBirds} loaded vs ` +
+        `${birdCheck.accountedFor} accounted for (${birdCheck.message}).`,
+        'error'
+      );
+      return;
+    }
+
+    setReviewOpen(true);
+  };
+
+  const handleSubmit = async () => {
+    const completedSalesData = completedLines;
 
     const salesEntry = {
       date: formData.date,
@@ -304,11 +494,14 @@ const SalesEntry = () => {
     setUiState(prev => ({ ...prev, submitting: true }));
     try {
       await createSalesEntry(salesEntry);
+      setReviewOpen(false);
       showSnackbar(VALIDATION_MESSAGES.SUBMIT_SUCCESS);
       handleClear();
     } catch (error) {
-      console.error('Error creating sales entry:', error);
-      showSnackbar(VALIDATION_MESSAGES.SUBMIT_ERROR, 'error');
+      // The API now returns a specific reason for a rejected entry (amount
+      // mismatch, unbalanced birds, a future date), so show that rather than a
+      // generic failure. The dialog stays open so the figures are still visible.
+      showSnackbar(error.message || VALIDATION_MESSAGES.SUBMIT_ERROR, 'error');
     } finally {
       setUiState(prev => ({ ...prev, submitting: false }));
     }
@@ -539,6 +732,47 @@ const SalesEntry = () => {
                     placeholder="Enter description..."
                   />
                 </Grid>
+
+                {/* What the server already knows about this date and route. */}
+                {(dateCheck.blocked || dateCheck.requiresConfirmation || duplicateCheck.isDuplicate) && (
+                  <Grid item xs={12}>
+                    {dateCheck.blocked && (
+                      <Alert severity="error" sx={{ py: 0.25, mb: 0.5 }}>
+                        {dateCheck.message}
+                      </Alert>
+                    )}
+                    {dateCheck.requiresConfirmation && (
+                      <Alert severity="warning" sx={{ py: 0.25, mb: 0.5 }}>
+                        {dateCheck.message}
+                      </Alert>
+                    )}
+                    {duplicateCheck.isDuplicate && (
+                      <Alert severity="warning" sx={{ py: 0.25 }}>
+                        {duplicateCheck.message}
+                      </Alert>
+                    )}
+                  </Grid>
+                )}
+
+                {/* Live bird reconciliation: loaded = sold + mortality + returned */}
+                <Grid item xs={12}>
+                  <Alert
+                    severity={birdCheck.balanced ? 'success' : 'warning'}
+                    icon={false}
+                    sx={{ py: 0.25, '& .MuiAlert-message': { py: 0.5 } }}
+                  >
+                    <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
+                      Birds:
+                    </Typography>{' '}
+                    <Typography variant="body2" component="span">
+                      {birdCheck.totalBirds.toLocaleString('en-IN')} loaded ={' '}
+                      {totals.birds.toLocaleString('en-IN')} sold +{' '}
+                      {(Number(formData.mortality) || 0).toLocaleString('en-IN')} mortality +{' '}
+                      {(Number(formData.returnToFarm) || 0).toLocaleString('en-IN')} returned
+                      {birdCheck.balanced ? ' — balanced' : ` — ${birdCheck.message}`}
+                    </Typography>
+                  </Alert>
+                </Grid>
               </Grid>
             </CardContent>
           </Card>
@@ -593,16 +827,19 @@ const SalesEntry = () => {
               {/* Scrollable Table with Fixed Totals */}
               <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* Data Rows - Scrollable */}
-                <TableContainer sx={{ flexGrow: 1, overflow: 'auto' }}>
+                <TableContainer
+                  ref={gridRef}
+                  onKeyDown={handleGridKeyDown}
+                  sx={{ flexGrow: 1, overflow: 'auto' }}
+                >
                   <Table stickyHeader size="small">
                     <TableHead>
                       <TableRow>
                         {['Customer', 'City', 'Birds', 'Kilograms', 'Rate', 'Amount', 'Payment', 'Pending', 'Balance', 'Description'].map(header => (
-                          <TableCell 
-                            key={header} 
-                            sx={{ 
-                              fontWeight: 'bold', 
-                              bgcolor: '#f5f5f5',
+                          <TableCell
+                            key={header}
+                            sx={{
+                              fontWeight: 700,
                               whiteSpace: 'nowrap',
                               py: 0.5,
                               fontSize: '0.85rem'
@@ -614,92 +851,16 @@ const SalesEntry = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {filteredCustomersWithSales.map(({ customer, salesIndex, salesData: customerSalesData, matches }) => (
-                        <TableRow 
-                          key={customer.id} 
-                          hover
-                          sx={{ 
-                            bgcolor: matches === false ? 'rgba(0,0,0,0.05)' : 'inherit',
-                            '& td': { py: 0.5 }
-                          }}
-                        >
-                          <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>{customer.name}</TableCell>
-                          <TableCell sx={{ fontSize: '0.85rem' }}>{customer.city.name}</TableCell>
-                          <TableCell>
-                            <TextField
-                              size="small"
-                              type="number"
-                              value={customerSalesData?.birds || ''}
-                              onChange={(e) => handleSalesDataChange(salesIndex, 'birds', e.target.value)}
-                              sx={{ width: 80 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <TextField
-                              size="small"
-                              type="number"
-                              step="0.1"
-                              value={customerSalesData?.kilograms || ''}
-                              onChange={(e) => handleSalesDataChange(salesIndex, 'kilograms', e.target.value)}
-                              sx={{ width: 80 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <TextField
-                              size="small"
-                              type="number"
-                              step="0.1"
-                              value={customerSalesData?.rate || ''}
-                              onChange={(e) => handleSalesDataChange(salesIndex, 'rate', e.target.value)}
-                              sx={{ width: 80 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
-                            ₹{customerSalesData?.amount || 0}
-                          </TableCell>
-                          <TableCell>
-                            <TextField
-                              size="small"
-                              type="number"
-                              value={customerSalesData?.payment || ''}
-                              onChange={(e) => handleSalesDataChange(salesIndex, 'payment', e.target.value)}
-                              sx={{ width: 100 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
-                            ₹{customerSalesData?.pending || 0}
-                          </TableCell>               
-                          <TableCell
-                            sx={{
-                              fontSize: '1rem',
-                              color:
-                                customerSalesData?.balanceAmount > 100000
-                                  ? 'darkred'
-                                  : customerSalesData?.balanceAmount > 50000
-                                  ? 'darkred'
-                                  : customerSalesData?.balanceAmount > 20000
-                                  ? 'darkgoldenrod'
-                                  : 'inherit',
-                              fontWeight: customerSalesData?.balanceAmount > 100000 ? 'bold' : 'normal',
-                            }}
-                          >
-                            ₹{customerSalesData?.balanceAmount || 0}
-                          </TableCell>
-
-                          <TableCell>
-                            <TextField
-                              size="small"
-                              value={customerSalesData?.description || ''}
-                              onChange={(e) => handleSalesDataChange(salesIndex, 'description', e.target.value)}
-                              sx={{ width: 120 }}
-                              inputProps={{ style: { fontSize: '0.85rem', padding: '8px 16px' } }}
-                            />
-                          </TableCell>
-                        </TableRow>
+                      {orderedCustomers.map(({ customer, salesIndex, matches }, rowIndex) => (
+                        <SaleRow
+                          key={customer.id}
+                          customer={customer}
+                          row={salesData[salesIndex]}
+                          rowIndex={rowIndex}
+                          salesIndex={salesIndex}
+                          dimmed={!matches}
+                          onChange={handleSalesDataChange}
+                        />
                       ))}
                     </TableBody>
                   </Table>
@@ -792,12 +953,12 @@ const SalesEntry = () => {
               variant="contained"
               color="primary"
               size="large"
-              startIcon={uiState.submitting ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-              onClick={handleSubmit}
-              disabled={uiState.submitting || !isFormValid}
+              startIcon={<SaveIcon />}
+              onClick={handleReview}
+              disabled={uiState.submitting || !isFormValid || dateCheck.blocked || !birdCheck.balanced}
               sx={{ minWidth: 150 }}
             >
-              {uiState.submitting ? 'Submitting...' : 'Submit Sales'}
+              Review &amp; Submit
             </Button>
             
             <Button
@@ -867,6 +1028,16 @@ const SalesEntry = () => {
       </Box>
 
       {/* Snackbar */}
+      <SaleSubmitDialog
+        open={reviewOpen}
+        summary={reviewSummary}
+        dateCheck={dateCheck}
+        duplicateCheck={duplicateCheck}
+        submitting={uiState.submitting}
+        onConfirm={handleSubmit}
+        onCancel={() => setReviewOpen(false)}
+      />
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}

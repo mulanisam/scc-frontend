@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
   Typography,
   Table,
   TableBody,
@@ -175,7 +174,7 @@ const CustomerLedgerView = () => {
     doc.setFont('helvetica', 'bold');
     const balanceColor = currentBalance > 0 ? [220, 38, 38] : currentBalance < 0 ? [46, 125, 50] : [0, 0, 0];
     doc.setTextColor(...balanceColor);
-    doc.text(`Current Balance: ${formatCurrency(Math.abs(currentBalance))} ${currentBalance > 0 ? '(Dr)' : currentBalance < 0 ? '(Cr)' : ''}`, pageWidth - 15, 60, { align: 'right' });
+    doc.text(`Current Balance: ${formatCurrency(Math.abs(currentBalance))} ${currentBalance > 0 ? '(Dr)' : currentBalance < 0 ? '(Cr)' : ''}`, pageWidth - 40, 60, { align: 'right' });
     doc.setTextColor(0, 0, 0);
     
     // Prepare table data
@@ -207,11 +206,11 @@ const CustomerLedgerView = () => {
       },
       columnStyles: {
         0: { cellWidth: 22 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 45 },
-        3: { cellWidth: 25, halign: 'right' },
-        4: { cellWidth: 25, halign: 'right' },
-        5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 28, align: 'right' },
+        4: { cellWidth: 28, align: 'right' },
+        5: { cellWidth: 38, align: 'right', fontStyle: 'bold' },
         6: { cellWidth: 20 }
       },
       alternateRowStyles: {

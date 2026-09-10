@@ -6,7 +6,6 @@ import {
   MenuItem, 
   Autocomplete, 
   Typography, 
-  Paper, 
   IconButton, 
   Table, 
   TableBody, 
@@ -31,10 +30,8 @@ import {
   Clear as ClearIcon,
   PictureAsPdf as PictureAsPdfIcon,
   Download as DownloadIcon,
-  Assessment as ReportsIcon,
   CalendarToday as DateIcon,
   FilterList as FilterIcon,
-  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
