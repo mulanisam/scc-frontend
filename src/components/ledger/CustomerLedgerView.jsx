@@ -1,7 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
+  Autocomplete,
   Box,
-  Typography,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  Grid,
+  InputAdornment,
+  Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -9,529 +21,477 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Button,
-  Grid,
-  Chip,
-  Alert,
-  CircularProgress,
-  Autocomplete,
-  Card,
-  CardContent,
-  CardHeader,
-  Divider,
-  InputAdornment,
   Tooltip,
-  Container
+  Typography
 } from '@mui/material';
-import { 
-  Download as DownloadIcon,
-  AccountBalanceWallet as LedgerIcon,
-  Person as PersonIcon,
+import {
   CalendarToday as DateIcon,
+  Download as DownloadIcon,
   FilterList as FilterIcon,
-  Assessment as ReportIcon
+  Person as PersonIcon,
+  Receipt as ReceiptIcon
 } from '@mui/icons-material';
-import axios from 'axios';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import { API_BASE_URL } from '../../config/axiosConfig';
+import apiClient from '../service/api';
 import LedgerService from '../service/LedgerService';
-import { getCompanyConfig } from '../../config/companyConfig';
+import {
+  STATEMENT_COLUMNS,
+  buildStatementModel,
+  describePeriod,
+  formatBalance,
+  formatCount,
+  formatMoney,
+  formatRate,
+  formatStatementDate,
+  formatWeight
+} from './ledgerStatement';
+import { exportStatementToPdf } from './ledgerStatementPdf';
+
+/**
+ * Statement of account for one customer.
+ *
+ * The screen and the PDF are two renderings of one model (ledgerStatement.js), so
+ * the columns, the opening balance and the totals cannot disagree between them -
+ * previously the PDF built its own row text and summed its own totals.
+ */
+
+/** Preset ranges, since a statement is nearly always asked for by month. */
+const iso = (date) => date.toISOString().slice(0, 10);
+const PRESETS = [
+  {
+    label: 'This month',
+    range: () => {
+      const now = new Date();
+      return [iso(new Date(now.getFullYear(), now.getMonth(), 1)), iso(now)];
+    }
+  },
+  {
+    label: 'Last month',
+    range: () => {
+      const now = new Date();
+      return [
+        iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+        iso(new Date(now.getFullYear(), now.getMonth(), 0))
+      ];
+    }
+  },
+  {
+    label: 'This year',
+    range: () => {
+      const now = new Date();
+      return [iso(new Date(now.getFullYear(), 0, 1)), iso(now)];
+    }
+  },
+  { label: 'All time', range: () => ['', ''] }
+];
+
+const balanceColour = (amount) =>
+  amount > 0 ? 'error.main' : amount < 0 ? 'success.main' : 'text.primary';
 
 const CustomerLedgerView = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [ledgerData, setLedgerData] = useState([]);
+  const [statement, setStatement] = useState(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
-    loadCustomers();
+    let cancelled = false;
+    apiClient.get('/user/customers')
+      .then((response) => {
+        if (!cancelled) setCustomers(response.data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Failed to load customers');
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  const loadCustomers = async () => {
+  const fetchStatement = useCallback(async (customerId, start, end) => {
+    setLoading(true);
+    setError('');
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_BASE_URL}/user/customers`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCustomers(response.data);
+      const data = await LedgerService.getCustomerStatement(customerId, start, end);
+      setStatement(data);
     } catch (err) {
-      setError('Failed to load customers');
+      setStatement(null);
+      setError(err.message || 'Failed to fetch the statement');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   const handleCustomerChange = (event, newValue) => {
     setSelectedCustomer(newValue);
     if (newValue) {
-      fetchLedger(newValue.id, startDate, endDate);
+      fetchStatement(newValue.id, startDate, endDate);
     } else {
-      setLedgerData([]);
+      setStatement(null);
     }
   };
 
-  const fetchLedger = async (customerId, start, end) => {
-    setLoading(true);
-    setError('');
-    
-    try {
-      const token = localStorage.getItem('token');
-      const data = await LedgerService.getCustomerLedger(customerId, start, end, token);
-      setLedgerData(data);
-    } catch (err) {
-      setError('Failed to fetch ledger data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFilterApply = () => {
+  const applyPreset = (preset) => {
+    const [start, end] = preset.range();
+    setStartDate(start);
+    setEndDate(end);
     if (selectedCustomer) {
-      fetchLedger(selectedCustomer.id, startDate, endDate);
+      fetchStatement(selectedCustomer.id, start, end);
     }
   };
 
-  const getTransactionTypeColor = (type) => {
-    switch (type) {
-      case 'SALE':
-        return 'error';
-      case 'PAYMENT':
-        return 'success';
-      case 'OPENING_BALANCE':
-        return 'default';
-      case 'CREDIT_NOTE':
-        return 'info';
-      case 'DEBIT_NOTE':
-        return 'warning';
-      default:
-        return 'default';
+  // One model, rendered twice: the table below and the downloaded PDF.
+  const model = useMemo(() => (statement ? buildStatementModel(statement) : null), [statement]);
+
+  const visibleRows = useMemo(() => {
+    if (!model) return [];
+    return model.showOpeningRow ? [model.openingRow, ...model.rows] : model.rows;
+  }, [model]);
+
+  const handleDownload = () => {
+    if (!model) return;
+    try {
+      exportStatementToPdf(model);
+    } catch (err) {
+      setError(`Could not generate the PDF: ${err.message}`);
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const formatCurrency = (amount) => {
-    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const downloadLedgerPDF = () => {
-    if (!selectedCustomer || ledgerData.length === 0) {
-      alert('No data to download');
-      return;
-    }
-
-    const companyConfig = getCompanyConfig();
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const pageHeight = doc.internal.pageSize.height;
-    
-    // Company Header
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(companyConfig.name, pageWidth / 2, 15, { align: 'center' });
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(companyConfig.address, pageWidth / 2, 22, { align: 'center' });
-    
-    doc.setFontSize(9);
-    doc.text(`Phone: ${companyConfig.contactNumber} | Email: ${companyConfig.email}`, pageWidth / 2, 28, { align: 'center' });
-    
-    // Document Title
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('CUSTOMER LEDGER REPORT', pageWidth / 2, 38, { align: 'center' });
-    
-    // Line separator
-    doc.setLineWidth(0.5);
-    doc.line(15, 41, pageWidth - 15, 41);
-    
-    // Customer Details
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Customer Details:', 15, 48);
-    
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${selectedCustomer.name}`, 15, 54);
-    doc.text(`Shop: ${selectedCustomer.shopName || 'N/A'}`, 15, 60);
-    doc.text(`Mobile: ${selectedCustomer.mobileNo || 'N/A'}`, 15, 66);
-    
-    // Period
-    const periodText = startDate && endDate 
-      ? `Period: ${formatDate(startDate)} to ${formatDate(endDate)}`
-      : 'Period: All Transactions';
-    doc.text(periodText, pageWidth - 15, 54, { align: 'right' });
-    
-    // Current Balance
-    doc.setFont('helvetica', 'bold');
-    const balanceColor = currentBalance > 0 ? [220, 38, 38] : currentBalance < 0 ? [46, 125, 50] : [0, 0, 0];
-    doc.setTextColor(...balanceColor);
-    doc.text(`Current Balance: ${formatCurrency(Math.abs(currentBalance))} ${currentBalance > 0 ? '(Dr)' : currentBalance < 0 ? '(Cr)' : ''}`, pageWidth - 40, 60, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    
-    // Prepare table data
-    const tableData = ledgerData.map(entry => [
-      formatDate(entry.transactionDate),
-      entry.transactionType,
-      entry.description || '-',
-      entry.debitAmount > 0 ? formatCurrency(entry.debitAmount) : '-',
-      entry.creditAmount > 0 ? formatCurrency(entry.creditAmount) : '-',
-      formatCurrency(Math.abs(entry.runningBalance)) + (entry.runningBalance > 0 ? ' Dr' : entry.runningBalance < 0 ? ' Cr' : ''),
-      entry.paymentMode || '-'
-    ]);
-    
-    // Add table
-    doc.autoTable({
-      startY: 72,
-      head: [['Date', 'Type', 'Description', 'Debit', 'Credit', 'Balance', 'Mode']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [41, 128, 185],
-        textColor: 255,
-        fontStyle: 'bold',
-        fontSize: 9
-      },
-      bodyStyles: {
-        fontSize: 8,
-        cellPadding: 3
-      },
-      columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 20 },
-        2: { cellWidth: 35 },
-        3: { cellWidth: 28, align: 'right' },
-        4: { cellWidth: 28, align: 'right' },
-        5: { cellWidth: 38, align: 'right', fontStyle: 'bold' },
-        6: { cellWidth: 20 }
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245]
-      },
-      margin: { left: 15, right: 15 },
-      didDrawPage: (data) => {
-        const pageCount = doc.internal.getNumberOfPages();
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(
-          `Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
-          pageWidth / 2,
-          pageHeight - 10,
-          { align: 'center' }
-        );
-        doc.text(
-          `Generated on: ${new Date().toLocaleString('en-IN')}`,
-          15,
-          pageHeight - 10
-        );
-        doc.text(
-          companyConfig.website,
-          pageWidth - 15,
-          pageHeight - 10,
-          { align: 'right' }
-        );
-      }
-    });
-    
-    // Summary box at the end
-    const finalY = doc.lastAutoTable.finalY + 10;
-    
-    // Calculate totals
-    const totalDebit = ledgerData.reduce((sum, entry) => sum + entry.debitAmount, 0);
-    const totalCredit = ledgerData.reduce((sum, entry) => sum + entry.creditAmount, 0);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Summary:', 15, finalY);
-    
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Total Debit (Sales): ${formatCurrency(totalDebit)}`, 15, finalY + 7);
-    doc.text(`Total Credit (Payments): ${formatCurrency(totalCredit)}`, 15, finalY + 13);
-    
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...balanceColor);
-    doc.text(`Net Balance: ${formatCurrency(Math.abs(currentBalance))} ${currentBalance > 0 ? '(Dr)' : currentBalance < 0 ? '(Cr)' : ''}`, 15, finalY + 19);
-    doc.setTextColor(0, 0, 0);
-    
-    // Save PDF
-    const fileName = `Ledger_${selectedCustomer.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
-  };
-
-  const currentBalance = ledgerData.length > 0 ? ledgerData[ledgerData.length - 1].runningBalance : 0;
+  const totals = model?.totals;
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      
+    <Container maxWidth="xl" sx={{ mt: 3, mb: 4 }}>
+      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-
-      {/* Filter Card */}
-      <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
-        <CardHeader 
-          avatar={<LedgerIcon />}
-          title="Customer Ledger"
-       
-           sx={{ 
-                bgcolor: 'primary.main', 
-                color: 'white',
-                py: 1,
-                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
-              }}
-        />
-        <CardContent>
-          <Grid container spacing={2}>
+      {/* Who and when */}
+      <Card elevation={2} sx={{ mb: 2 }}>
+        <CardContent sx={{ pb: 2 }}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={4}>
               <Autocomplete
                 options={customers}
-                getOptionLabel={(option) => `${option.name} - ${option.shopName || ''}`}
+                getOptionLabel={(option) => [option.name, option.shopName].filter(Boolean).join(' - ')}
                 value={selectedCustomer}
                 onChange={handleCustomerChange}
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Select Customer"
-                    placeholder="Search customer..."
+                    label="Customer"
+                    placeholder="Search by name or shop"
                     size="small"
                     InputProps={{
                       ...params.InputProps,
                       startAdornment: (
                         <>
-                          <InputAdornment position="start">
-                            <PersonIcon color="primary" />
-                          </InputAdornment>
+                          <InputAdornment position="start"><PersonIcon color="primary" /></InputAdornment>
                           {params.InputProps.startAdornment}
                         </>
-                      ),
+                      )
                     }}
                   />
                 )}
               />
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid item xs={6} md={2}>
               <TextField
                 fullWidth
-                label="Start Date"
+                label="From"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(event) => setStartDate(event.target.value)}
                 InputLabelProps={{ shrink: true }}
                 size="small"
                 InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <DateIcon color="primary" />
-                    </InputAdornment>
-                  )
+                  startAdornment: <InputAdornment position="start"><DateIcon color="primary" fontSize="small" /></InputAdornment>
                 }}
               />
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid item xs={6} md={2}>
               <TextField
                 fullWidth
-                label="End Date"
+                label="To"
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(event) => setEndDate(event.target.value)}
                 InputLabelProps={{ shrink: true }}
                 size="small"
                 InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <DateIcon color="primary" />
-                    </InputAdornment>
-                  )
+                  startAdornment: <InputAdornment position="start"><DateIcon color="primary" fontSize="small" /></InputAdornment>
                 }}
               />
             </Grid>
 
             <Grid item xs={12} md={2}>
-              <Tooltip title="Apply filter to view ledger">
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={() => selectedCustomer && fetchStatement(selectedCustomer.id, startDate, endDate)}
+                disabled={!selectedCustomer || loading}
+                startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FilterIcon />}
+                sx={{ height: 40 }}
+              >
+                {loading ? 'Loading' : 'Show'}
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} md={2}>
+              <Tooltip title="Download the statement of account as a PDF">
                 <Button
                   fullWidth
-                  variant="contained"
-                  onClick={handleFilterApply}
-                  disabled={!selectedCustomer || loading}
-                  startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <FilterIcon />}
-                  size="small"
-                  sx={{ height: '40px' }}
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownload}
+                  disabled={!model || model.rows.length === 0}
+                  sx={{ height: 40 }}
                 >
-                  {loading ? 'Loading...' : 'Apply'}
+                  Statement PDF
                 </Button>
               </Tooltip>
             </Grid>
           </Grid>
+
+          <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
+            {PRESETS.map((preset) => (
+              <Chip
+                key={preset.label}
+                label={preset.label}
+                size="small"
+                variant="outlined"
+                onClick={() => applyPreset(preset)}
+              />
+            ))}
+          </Stack>
         </CardContent>
       </Card>
 
-      {/* Customer Info & Download Card */}
-      {selectedCustomer && (
-        <Card elevation={1} sx={{ mb: 1, bgcolor: 'background.default' }}>
-          <CardContent>
-            <Grid container spacing={1} alignItems="center">
-              <Grid item xs={12} sm={4}>
-                <Box>
-                  {/* <Typography variant="caption" color="text.secondary">Customer</Typography> */}
-                  <Typography variant="h5" sx={{ fontWeight: 600 }}>{selectedCustomer.name}</Typography>
-                  <Typography variant="body1" color="text.secondary">{selectedCustomer.shopName}</Typography>
-                  <Typography variant="body1" color="text.secondary">{selectedCustomer.mobileNo}</Typography>
-                </Box>
-              </Grid>
-              
-              <Grid item xs={12} sm={4} textAlign="center">
-                <Typography variant="caption" color="text.secondary">Current Balance</Typography>
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    color: currentBalance > 0 ? 'error.main' : currentBalance < 0 ? 'success.main' : 'text.primary'
-                  }}
-                >
-                  {formatCurrency(Math.abs(currentBalance))}
+      {model && (
+        <>
+          {/* Identity and period, laid out as on the printed statement */}
+          <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={5}>
+                <Typography variant="overline" color="text.secondary">Statement for</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  {model.customer.name}
+                  {model.customer.obsolete && (
+                    <Chip label="Inactive" size="small" color="default" sx={{ ml: 1 }} />
+                  )}
                 </Typography>
-                <Chip 
-                  label={currentBalance > 0 ? 'Debit (Dr)' : currentBalance < 0 ? 'Credit (Cr)' : 'Settled'}
-                  color={currentBalance > 0 ? 'error' : currentBalance < 0 ? 'success' : 'default'}
-                  size="small"
-                  sx={{ mt: 1 }}
-                />
+                <Typography variant="body2" color="text.secondary">
+                  {[model.customer.shopName, model.customer.cityName].filter(Boolean).join(' - ')}
+                </Typography>
+                {model.customer.mobileNo && (
+                  <Typography variant="body2" color="text.secondary">Mobile {model.customer.mobileNo}</Typography>
+                )}
               </Grid>
 
-              <Grid item xs={12} sm={4} textAlign="right">
-                <Tooltip title="Download ledger as PDF">
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<DownloadIcon />}
-                    onClick={downloadLedgerPDF}
-                    disabled={!ledgerData || ledgerData.length === 0}
-                    size="large"
-                    sx={{ minWidth: 180 }}
-                  >
-                    Download PDF
-                  </Button>
-                </Tooltip>
+              <Grid item xs={12} md={7}>
+                <Stack spacing={0.5}>
+                  {[
+                    ['Account no.', `CUS-${model.customer.id}`],
+                    ['Period', describePeriod(model.period)],
+                    ['Transactions', `${totals.rowCount}`],
+                    ...(model.lastPayment
+                      ? [['Last payment', `${formatStatementDate(model.lastPayment.date)} - ₹${formatMoney(model.lastPayment.amount)}`]]
+                      : []),
+                    ...(model.customer.creditLimit !== null
+                      ? [['Credit limit', `₹${formatMoney(model.customer.creditLimit)}`]]
+                      : [])
+                  ].map(([label, value]) => (
+                    <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">{label}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'right' }}>{value}</Typography>
+                    </Box>
+                  ))}
+                </Stack>
               </Grid>
             </Grid>
-          </CardContent>
-        </Card>
+          </Paper>
+
+          {/* The position in four figures, same four as the PDF */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            {[
+              { label: 'Opening balance', value: formatBalance(totals.openingBalance), colour: balanceColour(totals.openingBalance) },
+              { label: 'Billed in period (Dr)', value: `₹${formatMoney(totals.totalDebit)}`, colour: 'error.main' },
+              { label: 'Received in period (Cr)', value: `₹${formatMoney(totals.totalCredit)}`, colour: 'success.main' },
+              { label: 'Closing balance', value: formatBalance(totals.closingBalance), colour: balanceColour(totals.closingBalance), emphasis: true }
+            ].map((tile) => (
+              <Grid item xs={12} sm={6} md={3} key={tile.label}>
+                <Paper
+                  elevation={tile.emphasis ? 4 : 1}
+                  sx={{
+                    p: 1.5,
+                    borderLeft: 4,
+                    borderColor: tile.emphasis ? 'primary.main' : 'divider',
+                    height: '100%'
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {tile.label}
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: tile.colour, fontVariantNumeric: 'tabular-nums' }}>
+                    {tile.value}
+                  </Typography>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </>
       )}
 
-      {/* Ledger Data Card */}
-      <Card elevation={3} sx={{ height: 'calc(100vh - 520px)', minHeight: 400, display: 'flex', flexDirection: 'column' }}>
-        <CardHeader 
-          avatar={<ReportIcon />}
-          title="Transaction History"
-          titleTypographyProps={{ variant: 'h6' }}
-          sx={{ flexShrink: 0 }}
-        />
-        <Divider />
-        <CardContent sx={{ p: 0, flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {/* Transactions */}
+      <Card elevation={2}>
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : ledgerData.length > 0 ? (
-            <TableContainer sx={{ flexGrow: 1, overflow: 'auto' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress /></Box>
+          ) : visibleRows.length > 0 ? (
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 460px)', minHeight: 280 }}>
               <Table size="small" stickyHeader>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: 'grey.100' }}>
-                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Type</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Description</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Debit (Sale)</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Credit (Payment)</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Balance</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Mode</TableCell>
+                  <TableRow>
+                    {STATEMENT_COLUMNS.map((column) => (
+                      <TableCell
+                        key={column.key}
+                        align={column.numeric ? 'right' : 'left'}
+                        sx={{ fontWeight: 700, bgcolor: 'primary.main', color: 'common.white', whiteSpace: 'nowrap' }}
+                      >
+                        {column.label.replace(' (Rs.)', ' (₹)')}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {ledgerData.map((entry) => (
-                    <TableRow 
-                      key={entry.id}
-                      sx={{ 
-                        bgcolor: entry.isBackdated ? 'warning.lighter' : 'inherit',
-                        '&:hover': { bgcolor: 'action.hover' }
+                  {visibleRows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      hover
+                      sx={{
+                        bgcolor: row.kind === 'opening' ? 'action.hover' : undefined,
+                        '& td': {
+                          fontStyle: row.obsolete ? 'italic' : 'normal',
+                          color: row.obsolete ? 'text.disabled' : undefined,
+                          fontVariantNumeric: 'tabular-nums'
+                        }
                       }}
                     >
-                      <TableCell>
-                        {formatDate(entry.transactionDate)}
-                        {entry.isBackdated && (
-                          <Chip 
-                            label="Backdated" 
-                            size="small" 
-                            color="warning" 
-                            sx={{ ml: 1, height: 20 }} 
-                          />
-                        )}
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatStatementDate(row.date)}</TableCell>
+                      <TableCell sx={{ fontWeight: row.kind === 'opening' ? 700 : 400 }}>
+                        {row.particulars}
+                        {row.backdated && <Chip label="back-dated" size="small" color="warning" sx={{ ml: 0.75, height: 18 }} />}
+                        {row.obsolete && <Chip label="corrected" size="small" sx={{ ml: 0.75, height: 18 }} />}
                       </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={entry.transactionType} 
-                          color={getTransactionTypeColor(entry.transactionType)}
-                          size="small"
-                        />
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{row.voucher}</TableCell>
+                      <TableCell align="right">{formatCount(row.birds)}</TableCell>
+                      <TableCell align="right">{formatWeight(row.weight)}</TableCell>
+                      <TableCell align="right">{formatRate(row.rate)}</TableCell>
+                      <TableCell align="right" sx={{ color: row.debit > 0 ? 'error.main' : undefined }}>
+                        {row.debit > 0 ? formatMoney(row.debit) : ''}
                       </TableCell>
-                      <TableCell>{entry.description}</TableCell>
-                      <TableCell align="right" sx={{ color: 'error.main', fontWeight: 500 }}>
-                        {entry.debitAmount > 0 ? formatCurrency(entry.debitAmount) : '-'}
+                      <TableCell align="right" sx={{ color: row.credit > 0 ? 'success.main' : undefined }}>
+                        {row.credit > 0 ? formatMoney(row.credit) : ''}
                       </TableCell>
-                      <TableCell align="right" sx={{ color: 'success.main', fontWeight: 500 }}>
-                        {entry.creditAmount > 0 ? formatCurrency(entry.creditAmount) : '-'}
-                      </TableCell>
-                      <TableCell 
-                        align="right" 
-                        sx={{ 
-                          fontWeight: 'bold',
-                          color: entry.runningBalance > 0 ? 'error.main' : entry.runningBalance < 0 ? 'success.main' : 'text.primary'
-                        }}
-                      >
-                        {formatCurrency(Math.abs(entry.runningBalance))}
-                        {entry.runningBalance > 0 && ' Dr'}
-                        {entry.runningBalance < 0 && ' Cr'}
-                      </TableCell>
-                      <TableCell>
-                        {entry.paymentMode ? (
-                          <Chip label={entry.paymentMode} size="small" variant="outlined" />
-                        ) : '-'}
+                      <TableCell align="right" sx={{ fontWeight: 700, color: balanceColour(row.balance), whiteSpace: 'nowrap' }}>
+                        {formatBalance(row.balance)}
                       </TableCell>
                     </TableRow>
                   ))}
+
+                  {/* Period totals in the columns they belong to */}
+                  <TableRow sx={{ position: 'sticky', bottom: 0, bgcolor: 'grey.100' }}>
+                    <TableCell />
+                    <TableCell sx={{ fontWeight: 700 }}>Total for the period</TableCell>
+                    <TableCell />
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCount(totals.birds)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>{formatWeight(totals.weight)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>{formatRate(totals.averageRate)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main' }}>{formatMoney(totals.totalDebit)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{formatMoney(totals.totalCredit)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: balanceColour(totals.closingBalance) }}>
+                      {formatBalance(totals.closingBalance)}
+                    </TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </TableContainer>
-          ) : selectedCustomer ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <ReportIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                No ledger entries found
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                This customer has no transactions in the selected period
-              </Typography>
-            </Box>
           ) : (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                Select a customer to view ledger
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Use the filter above to choose a customer
-              </Typography>
+            <Box sx={{ p: 5, textAlign: 'center' }}>
+              {selectedCustomer ? (
+                <>
+                  <ReceiptIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 1 }} />
+                  <Typography variant="h6" color="text.secondary">No transactions in this period</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Widen the date range, or pick All time to see the full history.
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <PersonIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 1 }} />
+                  <Typography variant="h6" color="text.secondary">Choose a customer</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Their statement of account appears here, ready to download.
+                  </Typography>
+                </>
+              )}
             </Box>
           )}
         </CardContent>
+
+        {model && model.rows.length > 0 && (
+          <>
+            <Divider />
+            <CardContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="overline" color="text.secondary">What was traded</Typography>
+                  <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                    {[
+                      ['Sale transactions', formatCount(totals.saleCount) || '0'],
+                      ['Birds supplied', formatCount(totals.birds) || '0'],
+                      ['Weight supplied (kg)', formatWeight(totals.weight) || '0.000'],
+                      ['Average realised rate (₹/kg)', formatRate(totals.averageRate) || '0.00'],
+                      [
+                        'Collected with sales',
+                        `${formatCount(totals.salesWithCollectionCount) || '0'} of ${formatCount(totals.saleCount) || '0'} - ₹${formatMoney(totals.collectedWithSales)}`
+                      ],
+                      ['Separate payment receipts', formatCount(totals.paymentCount) || '0'],
+                      ['Adjustments', formatCount(totals.adjustmentCount) || '0']
+                    ].map(([label, value]) => (
+                      <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">{label}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Typography variant="overline" color="text.secondary">How the balance moved</Typography>
+                  <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                    {[
+                      ['Opening balance', formatBalance(totals.openingBalance)],
+                      ['Add: sales and debits', `+ ${formatMoney(totals.totalDebit)}`],
+                      ['Less: payments and credits', `- ${formatMoney(totals.totalCredit)}`]
+                    ].map(([label, value]) => (
+                      <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">{label}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
+                      </Box>
+                    ))}
+                    <Divider sx={{ my: 0.5 }} />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Closing balance</Typography>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, color: balanceColour(totals.closingBalance), fontVariantNumeric: 'tabular-nums' }}>
+                        {formatBalance(totals.closingBalance)}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </>
+        )}
       </Card>
     </Container>
   );

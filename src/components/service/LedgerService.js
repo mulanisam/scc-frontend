@@ -1,46 +1,50 @@
-import axios from "axios";
-import { API_BASE_URL } from '../../config/axiosConfig.js';
+import apiClient from './api.js';
 
+/**
+ * Customer ledger and statement access.
+ *
+ * Goes through apiClient, which attaches the bearer token, handles a 401 centrally
+ * and turns a server rejection into an Error carrying the server's own message -
+ * so a reversed date range surfaces as "End date ... is before start date ..."
+ * rather than a generic failure. The previous version took a token argument and
+ * built its own axios call, which meant every caller had to read localStorage.
+ */
 class LedgerService {
-    
-    /**
-     * Get customer ledger with optional date range
-     */
-    static async getCustomerLedger(customerId, startDate, endDate, token) {
-        try {
-            let url = `${API_BASE_URL}/user/ledger/customer/${customerId}`;
-            const params = new URLSearchParams();
-            
-            if (startDate) params.append('startDate', startDate);
-            if (endDate) params.append('endDate', endDate);
-            
-            if (params.toString()) {
-                url += `?${params.toString()}`;
-            }
-            
-            const response = await axios.get(url, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            return response.data;
-        } catch (err) {
-            throw err;
-        }
-    }
 
-    /**
-     * Get customer's current balance from ledger
-     */
-    static async getCurrentBalance(customerId, token) {
-        try {
-            const ledger = await this.getCustomerLedger(customerId, null, null, token);
-            if (ledger && ledger.length > 0) {
-                return ledger[ledger.length - 1].runningBalance;
-            }
-            return 0;
-        } catch (err) {
-            throw err;
-        }
-    }
+  /**
+   * Raw ledger rows for a date range. Kept for callers that only need the rows;
+   * a statement wants getCustomerStatement instead, which also carries the
+   * balance brought forward and the closing figures.
+   */
+  static async getCustomerLedger(customerId, startDate, endDate) {
+    const response = await apiClient.get(`/user/ledger/customer/${customerId}`, {
+      params: {
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {})
+      }
+    });
+    return response.data;
+  }
+
+  /**
+   * Full statement of account: identity, period, opening balance, transactions
+   * with each sale's birds/weight/rate resolved, and the closing totals.
+   */
+  static async getCustomerStatement(customerId, startDate, endDate) {
+    const response = await apiClient.get(`/user/ledger/customer/${customerId}/statement`, {
+      params: {
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {})
+      }
+    });
+    return response.data;
+  }
+
+  /** Closing balance over the whole history. */
+  static async getCurrentBalance(customerId) {
+    const statement = await this.getCustomerStatement(customerId, null, null);
+    return statement?.totals?.closingBalance ?? 0;
+  }
 }
 
 export default LedgerService;
