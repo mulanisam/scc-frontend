@@ -1,89 +1,39 @@
 import apiClient from './api.js';
 
-// ===== Common Error Logger =====
-const logApiError = (error, context) => {
-  console.error(`Dashboard API Error (${context}):`, error);
+/**
+ * Dashboard data access.
+ *
+ * One call. The previous version exported four fetchers and a fetchDashboardAll
+ * that ran them through Promise.all - but /dashboard/route-wise,
+ * /dashboard/high-balance-customers and /dashboard/route-pending have never
+ * existed on the server, so any use of fetchDashboardAll rejected on the first
+ * 404 and took the working call down with it. /dashboard/overview carries
+ * everything those three were meant to provide.
+ */
+
+/**
+ * Everything the dashboard shows, for one date.
+ *
+ * @param {string} [date] ISO date; omitted means today. The server honours it -
+ *   the old /dashboard/data ignored the date and always answered for today, which
+ *   is why the date picker appeared to do nothing.
+ */
+export const fetchDashboardOverview = async (date) => {
+  const response = await apiClient.get('/dashboard/overview', {
+    params: date ? { date } : {}
+  });
+  return response.data;
 };
 
-// ===== 1. Dashboard Summary =====
-export const fetchDashboardData = async (date) => {
-  try {
-    const response = await apiClient.get('/dashboard/data', {
-      params: date ? { date } : {},
-    });
-    return response.data;
-  } catch (error) {
-    logApiError(error, 'fetchDashboardData');
-    throw error;
-  }
+/** The original seven today-only figures. Kept only for backwards compatibility. */
+export const fetchDashboardData = async () => {
+  const response = await apiClient.get('/dashboard/data');
+  return response.data;
 };
 
-// ===== 2. Route-wise Metrics =====
-export const fetchRouteWiseData = async (date) => {
-  try {
-    const response = await apiClient.get('/dashboard/route-wise', {
-      params: date ? { date } : {},
-    });
-    return response.data;
-  } catch (error) {
-    logApiError(error, 'fetchRouteWiseData');
-    throw error;
-  }
-};
-
-// ===== 3. High Balance Customers (No Date Needed) =====
-export const fetchHighBalanceCustomers = async () => {
-  try {
-    const response = await apiClient.get('/dashboard/high-balance-customers');
-    return response.data;
-  } catch (error) {
-    logApiError(error, 'fetchHighBalanceCustomers');
-    throw error;
-  }
-};
-
-// ===== 4. Route-wise Pending Chart =====
-export const fetchRoutePending = async (date) => {
-  try {
-    const response = await apiClient.get('/dashboard/route-pending', {
-      params: date ? { date } : {},
-    });
-    return response.data;
-  } catch (error) {
-    logApiError(error, 'fetchRoutePending');
-    throw error;
-  }
-};
-
-// ===== Optional: Combined Fetch (Performance Optimized) =====
-export const fetchDashboardAll = async (date) => {
-  try {
-    const [dashboard, routes, customers, pending] = await Promise.all([
-      fetchDashboardData(date),
-      fetchRouteWiseData(date),
-      fetchHighBalanceCustomers(),
-      fetchRoutePending(date),
-    ]);
-
-    return {
-      metrics: dashboard,
-      routeData: routes,
-      customers,
-      routePending: pending,
-    };
-  } catch (error) {
-    logApiError(error, 'fetchDashboardAll');
-    throw error;
-  }
-};
-
-// ===== Default Export =====
 const DashboardService = {
-  fetchDashboardData,
-  fetchRouteWiseData,
-  fetchHighBalanceCustomers,
-  fetchRoutePending,
-  fetchDashboardAll,
+  fetchDashboardOverview,
+  fetchDashboardData
 };
 
 export default DashboardService;
