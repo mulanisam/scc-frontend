@@ -39,7 +39,8 @@ import {
   fetchSalesDetail,
   fetchSalesSummary,
   REPORT_PERIODS,
-  REPORT_DIMENSIONS
+  REPORT_DIMENSIONS,
+  fetchTripReconciliation
 } from '../service/ReportsService';
 import { getData } from '../service/MasterDataService';
 import { exportReportToPdf, exportReportToExcel } from './reportExport';
@@ -105,14 +106,54 @@ const numericCellSx = {
   whiteSpace: 'nowrap'
 };
 
-const SUMMARY_COLUMNS = [
-  { key: 'periodLabel', label: 'Period' },
-  { key: 'dimensionName', label: 'Name' },
+/**
+ * Summary columns. The second dimension column only appears when the report
+ * actually crosses two, so a single-dimension report is not padded with a column
+ * of repeated placeholder text.
+ */
+const summaryColumns = (dimensionLabel, dimension2Label) => [
+  { key: 'periodLabel', label: 'Period', groupKey: 1 },
+  { key: 'dimensionName', label: dimensionLabel, groupKey: 2 },
+  ...(dimension2Label ? [{ key: 'dimension2Name', label: dimension2Label }] : []),
   { key: 'transactionCount', label: 'Sales', numeric: true },
   { key: 'birds', label: 'Birds', numeric: true },
   { key: 'weight', label: 'Weight (kg)', numeric: true },
   { key: 'amount', label: 'Amount', numeric: true },
-  { key: 'payment', label: 'Received', numeric: true },
+  { key: 'payment', label: 'Recovered', numeric: true },
+  { key: 'pending', label: 'Pending', numeric: true },
+  { key: 'averageRate', label: 'Avg rate', numeric: true },
+  { key: 'closingBalance', label: 'Total balance', numeric: true }
+];
+
+/** Numeric summary fields that a subtotal adds up. */
+const SUBTOTAL_FIELDS = ['transactionCount', 'birds', 'weight', 'amount', 'payment', 'pending'];
+
+/**
+ * Trip reconciliation: every figure for one vehicle load.
+ *
+ * "Weight loss" is shrinkage between the farm and the customer and needs the
+ * loaded weight, which was only recently given a field — it shows as "—" for
+ * historical trips, meaning unknown rather than zero. "Header vs lines" is a
+ * separate thing: the trip's own total disagreeing with its sale lines, which is
+ * a data fault rather than a real loss.
+ */
+const RECONCILIATION_COLUMNS = [
+  { key: 'date', label: 'Date' },
+  { key: 'route', label: 'Route' },
+  { key: 'vehicle', label: 'Vehicle' },
+  { key: 'driver', label: 'Driver' },
+  { key: 'birdsLoaded', label: 'Birds loaded', numeric: true },
+  { key: 'birdsSold', label: 'Sold', numeric: true },
+  { key: 'mortality', label: 'Mortality', numeric: true },
+  { key: 'returnToFarm', label: 'To farm (stock)', numeric: true },
+  { key: 'birdVariance', label: 'Bird variance', numeric: true },
+  { key: 'weightLoaded', label: 'Wt loaded', numeric: true },
+  { key: 'weightSold', label: 'Wt sold', numeric: true },
+  { key: 'weightLoss', label: 'Weight loss', numeric: true },
+  { key: 'headerWeightVariance', label: 'Header vs lines', numeric: true },
+  { key: 'averageWeightPerBird', label: 'kg/bird', numeric: true },
+  { key: 'amount', label: 'Amount', numeric: true },
+  { key: 'paid', label: 'Paid', numeric: true },
   { key: 'pending', label: 'Pending', numeric: true },
   { key: 'averageRate', label: 'Avg rate', numeric: true },
   { key: 'closingBalance', label: 'Closing balance', numeric: true }
@@ -143,6 +184,7 @@ const ReportPage = () => {
     endDate: today(),
     period: 'WEEK',
     groupBy: 'CUSTOMER',
+    groupBy2: 'NONE',
     excludeObsolete: true
   });
   const [dimensionFilter, setDimensionFilter] = useState({ key: null, value: null, label: '' });
@@ -157,6 +199,11 @@ const ReportPage = () => {
   const dimension = useMemo(
     () => REPORT_DIMENSIONS.find((d) => d.value === filters.groupBy) ?? REPORT_DIMENSIONS[0],
     [filters.groupBy]
+  );
+
+  const dimension2 = useMemo(
+    () => REPORT_DIMENSIONS.find((d) => d.value === filters.groupBy2) ?? REPORT_DIMENSIONS[5],
+    [filters.groupBy2]
   );
 
   // Options for narrowing to one route, customer, driver and so on.
@@ -198,6 +245,7 @@ const ReportPage = () => {
       endDate: filters.endDate,
       period: filters.period,
       groupBy: filters.groupBy,
+      groupBy2: filters.groupBy2,
       excludeObsolete: filters.excludeObsolete,
       ...overrides
     };
@@ -212,9 +260,14 @@ const ReportPage = () => {
     setError('');
     try {
       const request = buildRequest(overrides);
-      const data = nextMode === 'detail'
-        ? await fetchSalesDetail(request)
-        : await fetchSalesSummary(request);
+      let data;
+      if (nextMode === 'detail') {
+        data = await fetchSalesDetail(request);
+      } else if (nextMode === 'reconciliation') {
+        data = await fetchTripReconciliation(request);
+      } else {
+        data = await fetchSalesSummary(request);
+      }
       setReport(data);
       setMode(nextMode);
     } catch (err) {
@@ -263,18 +316,45 @@ const ReportPage = () => {
     });
   };
 
-  const columns = mode === 'detail' ? DETAIL_COLUMNS : SUMMARY_COLUMNS;
+  const columns = mode === 'detail'
+    ? DETAIL_COLUMNS
+    : mode === 'reconciliation'
+      ? RECONCILIATION_COLUMNS
+      : summaryColumns(dimension.label, filters.groupBy2 === 'NONE' ? null : dimension2.label);
   const totals = report?.totals;
 
   // Memoised because the display rows below derive from it: a fresh []
   // on every render would rebuild every formatted row each time.
-  const rows = useMemo(
-    () => (mode === 'detail' ? report?.detail : report?.summary) ?? [],
-    [mode, report]
-  );
+  const rows = useMemo(() => {
+    if (mode === 'detail') return report?.detail ?? [];
+    if (mode === 'reconciliation') return report?.trips ?? [];
+    return report?.summary ?? [];
+  }, [mode, report]);
 
   /** Totals shaped like a row, so the table, PDF and Excel share one definition. */
   const totalsRow = useMemo(() => {
+    // Reconciliation carries its totals on the response itself rather than in a
+    // totals object, because the figures are different ones.
+    if (mode === 'reconciliation') {
+      if (!report) return null;
+      return {
+        date: 'TOTAL',
+        route: `${count(report.tripCount)} trips`,
+        birdsLoaded: count(report.birdsLoaded),
+        birdsSold: count(report.birdsSold),
+        mortality: count(report.mortality),
+        returnToFarm: count(report.returnToFarm),
+        birdVariance: count(report.birdVariance),
+        weightLoaded: report.weightLoaded == null ? '—' : weight(report.weightLoaded),
+        weightSold: weight(report.weightSold),
+        weightLoss: report.weightLoss == null ? '—' : weight(report.weightLoss),
+        amount: money(report.amount),
+        paid: money(report.paid),
+        pending: money(report.pending),
+        averageRate: money(report.averageRate)
+      };
+    }
+
     if (!totals) return null;
     const base = {
       transactionCount: count(totals.transactionCount),
@@ -288,11 +368,31 @@ const ReportPage = () => {
     return mode === 'detail'
       ? { ...base, date: 'TOTAL', customer: `${count(totals.rowCount)} transactions` }
       : { ...base, periodLabel: 'TOTAL', dimensionName: `${count(totals.rowCount)} rows` };
-  }, [totals, mode]);
+  }, [totals, mode, report]);
 
   /** Rows formatted for display and for export, so both agree. */
   const displayRows = useMemo(() => rows.map((row) => ({
     ...row,
+    // Reconciliation fields. weightLoaded and weightLoss stay as an em dash when
+    // null: the loaded weight was never captured for historical trips, and
+    // showing 0.000 would claim there was no shrinkage rather than that it is
+    // unknown.
+    weightLoaded: row.weightLoaded === undefined
+      ? undefined : (row.weightLoaded === null ? '—' : weight(row.weightLoaded)),
+    weightLoss: row.weightLoss === undefined
+      ? undefined : (row.weightLoss === null ? '—' : weight(row.weightLoss)),
+    weightSold: row.weightSold !== undefined ? weight(row.weightSold) : undefined,
+    headerWeightVariance: row.headerWeightVariance !== undefined
+      ? weight(row.headerWeightVariance) : undefined,
+    averageWeightPerBird: row.averageWeightPerBird == null
+      ? (row.averageWeightPerBird === undefined ? undefined : '—')
+      : Number(row.averageWeightPerBird).toFixed(3),
+    birdsLoaded: row.birdsLoaded !== undefined ? count(row.birdsLoaded) : undefined,
+    birdsSold: row.birdsSold !== undefined ? count(row.birdsSold) : undefined,
+    mortality: row.mortality !== undefined ? count(row.mortality) : undefined,
+    returnToFarm: row.returnToFarm !== undefined ? count(row.returnToFarm) : undefined,
+    birdVariance: row.birdVariance !== undefined ? count(row.birdVariance) : undefined,
+    paid: row.paid !== undefined ? money(row.paid) : undefined,
     weight: weight(row.weight),
     amount: money(row.amount),
     payment: money(row.payment),
@@ -305,7 +405,70 @@ const ReportPage = () => {
     transactionCount: row.transactionCount !== undefined ? count(row.transactionCount) : undefined
   })), [rows]);
 
-  const exportTitle = `${report?.title ?? 'Sales report'}${drillFrom ? ` — ${drillFrom.label}` : ''}`;
+  const reportTitle = report?.title ?? (mode === 'reconciliation' ? 'Trip reconciliation' : 'Sales report');
+  /**
+   * Render items for the summary table: data rows with repeated values blanked,
+   * and a subtotal after each group.
+   *
+   * Repeating the period and the primary dimension on every row makes a weekly
+   * per-customer report hard to read - the week is restated for all ten
+   * customers. Each is shown once, on the first row it applies to, and the group
+   * is closed with its own total.
+   */
+  const groupedItems = useMemo(() => {
+    if (mode !== 'summary' || rows.length === 0) return null;
+
+    const hasSecond = filters.groupBy2 !== 'NONE';
+    // With two dimensions, subtotal per (period, primary). With one, per period.
+    const groupOf = (row) => (hasSecond
+      ? `${row.periodStart}|${row.dimensionId}`
+      : `${row.periodStart}`);
+
+    const items = [];
+    let previousPeriod = null;
+    let previousPrimary = null;
+    let currentGroup = null;
+    let accumulator = null;
+
+    const flush = () => {
+      if (accumulator) items.push({ type: 'subtotal', values: accumulator });
+      accumulator = null;
+    };
+
+    rows.forEach((row, index) => {
+      const group = groupOf(row);
+      if (group !== currentGroup) {
+        flush();
+        currentGroup = group;
+        accumulator = { label: hasSecond ? row.dimensionName : row.periodLabel };
+        SUBTOTAL_FIELDS.forEach((field) => { accumulator[field] = 0; });
+        accumulator.closingBalance = 0;
+      }
+
+      SUBTOTAL_FIELDS.forEach((field) => {
+        accumulator[field] += Number(row[field]) || 0;
+      });
+      accumulator.closingBalance += Number(row.closingBalance) || 0;
+
+      items.push({
+        type: 'data',
+        index,
+        // Blank a value when it repeats the row above.
+        hidePeriod: row.periodLabel === previousPeriod,
+        hidePrimary: hasSecond
+          && row.periodLabel === previousPeriod
+          && row.dimensionName === previousPrimary
+      });
+
+      previousPeriod = row.periodLabel;
+      previousPrimary = row.dimensionName;
+    });
+
+    flush();
+    return items;
+  }, [mode, rows, filters.groupBy2]);
+
+  const exportTitle = `${reportTitle}${drillFrom ? ` — ${drillFrom.label}` : ''}`;
   const exportSubtitle = [
     `${report?.startDate} to ${report?.endDate}`,
     mode === 'summary' && report?.periodLabel ? `Period: ${report.periodLabel}` : null,
@@ -383,6 +546,20 @@ const ReportPage = () => {
 
           <TextField
             select
+            label="Then by (optional)"
+            size="small"
+            value={filters.groupBy2}
+            onChange={(e) => setFilters((prev) => ({ ...prev, groupBy2: e.target.value }))}
+            sx={{ minWidth: 160 }}
+            helperText="e.g. Route then Driver"
+          >
+            {REPORT_DIMENSIONS.filter((option) => option.value !== filters.groupBy).map((option) => (
+              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select
             label="Totals per"
             size="small"
             value={filters.period}
@@ -437,6 +614,7 @@ const ReportPage = () => {
           >
             <ToggleButton value="summary">Period totals</ToggleButton>
             <ToggleButton value="detail">Transactions</ToggleButton>
+            <ToggleButton value="reconciliation">Trip reconciliation</ToggleButton>
           </ToggleButtonGroup>
 
           <Button
@@ -497,8 +675,57 @@ const ReportPage = () => {
         </Alert>
       )}
 
+      {/* Reconciliation headline figures and data-quality flags */}
+      {mode === 'reconciliation' && report && (
+        <>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+            {[
+              ['Trips', count(report.tripCount)],
+              ['Birds loaded', count(report.birdsLoaded)],
+              ['Sold', count(report.birdsSold)],
+              ['Mortality', `${count(report.mortality)} (${report.mortalityPercent ?? 0}%)`],
+              ['To farm (stock)', count(report.returnToFarm)],
+              ['Weight sold', `${weight(report.weightSold)} kg`],
+              ['Weight loss', report.weightLoss == null ? 'Not recorded' : `${weight(report.weightLoss)} kg`],
+              ['Amount', money(report.amount)],
+              ['Paid', money(report.paid)],
+              ['Pending', money(report.pending)]
+            ].map(([label, value]) => (
+              <Paper key={label} variant="outlined" sx={{ px: 1.5, py: 1, minWidth: 118 }}>
+                <Typography variant="caption" color="text.secondary">{label}</Typography>
+                <Typography sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {value}
+                </Typography>
+              </Paper>
+            ))}
+          </Box>
+
+          {report.tripsWithLoadedWeight === 0 && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Weight loss cannot be calculated for these trips: the weight loaded at
+              the farm was never recorded. Enter it on new trips and this column
+              will fill in from then on.
+            </Alert>
+          )}
+
+          {report.unbalancedTripCount > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <strong>{count(report.unbalancedTripCount)} of {count(report.tripCount)} trips
+              do not balance</strong> — birds loaded does not equal sold + mortality +
+              returned. Historical trips often have no loaded count at all, so the
+              variance reflects missing entry rather than missing birds. New entries
+              are rejected unless they balance.
+              {report.headerMismatchCount > 0
+                && ` ${count(report.headerMismatchCount)} trip(s) also disagree with their own sale lines.`}
+              {report.correctionCount > 0
+                && ` ${count(report.correctionCount)} trip(s) are marked as corrections.`}
+            </Alert>
+          )}
+        </>
+      )}
+
       {/* Headline figures */}
-      {totals && (
+      {mode !== 'reconciliation' && totals && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
           {[
             ['Sales', count(totals.transactionCount)],
@@ -534,7 +761,7 @@ const ReportPage = () => {
       {rows.length > 0 && (
         <Paper variant="outlined">
           <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography sx={{ fontWeight: 600 }}>{report.title}</Typography>
+            <Typography sx={{ fontWeight: 600 }}>{reportTitle}</Typography>
             <Typography variant="body2" color="text.secondary">
               {report.startDate} to {report.endDate}
             </Typography>
@@ -566,7 +793,83 @@ const ReportPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {displayRows.map((row, index) => {
+                {/* Summary: grouped, with repeats blanked and a subtotal per group. */}
+                {groupedItems && groupedItems.map((item, itemIndex) => {
+                  if (item.type === 'subtotal') {
+                    const values = item.values;
+                    return (
+                      <TableRow key={`sub-${itemIndex}`} sx={{ bgcolor: 'action.hover' }}>
+                        {columns.map((column, columnIndex) => {
+                          let content = '';
+                          if (columnIndex === 0) content = `${values.label} — total`;
+                          else if (column.key === 'transactionCount') content = count(values.transactionCount);
+                          else if (column.key === 'birds') content = count(values.birds);
+                          else if (column.key === 'weight') content = weight(values.weight);
+                          else if (column.key === 'amount') content = money(values.amount);
+                          else if (column.key === 'payment') content = money(values.payment);
+                          else if (column.key === 'pending') content = money(values.pending);
+                          else if (column.key === 'closingBalance') content = money(values.closingBalance);
+                          return (
+                            <TableCell
+                              key={column.key}
+                              sx={{
+                                fontWeight: 700,
+                                borderTop: '1px solid',
+                                borderTopColor: 'divider',
+                                ...(column.numeric ? numericCellSx : { whiteSpace: 'nowrap' })
+                              }}
+                            >
+                              {content}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  }
+
+                  const row = displayRows[item.index];
+                  const raw = rows[item.index];
+                  const clickable = dimension.filterKey && raw.dimensionId;
+                  return (
+                    <TableRow
+                      key={`row-${item.index}`}
+                      hover
+                      onClick={clickable ? () => drillInto(raw) : undefined}
+                      sx={{ cursor: clickable ? 'pointer' : 'default' }}
+                    >
+                      {columns.map((column) => {
+                        const isBalance = column.key === 'closingBalance';
+                        // A repeated period or primary name is left blank rather
+                        // than restated on every row of the group.
+                        const blank = (column.key === 'periodLabel' && item.hidePeriod)
+                          || (column.key === 'dimensionName' && item.hidePrimary);
+                        return (
+                          <TableCell
+                            key={column.key}
+                            sx={{
+                              ...(column.numeric ? numericCellSx : { whiteSpace: 'nowrap' }),
+                              ...(isBalance
+                                ? { color: balanceColour(raw.closingBalance), fontWeight: 600 }
+                                : {})
+                            }}
+                          >
+                            {blank ? '' : (
+                              <>
+                                {isBalance && Number(raw.closingBalance) > 50000 && (
+                                  <RisingIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
+                                )}
+                                {row[column.key] ?? ''}
+                              </>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+
+                {/* Detail and reconciliation render flat. */}
+                {!groupedItems && displayRows.map((row, index) => {
                   const raw = rows[index];
                   const clickable = mode === 'summary' && dimension.filterKey && raw.dimensionId;
                   return (

@@ -53,3 +53,14 @@ export const REPORT_DIMENSIONS = [
   { value: 'CITY', label: 'City', master: 'cities', filterKey: 'cityId' },
   { value: 'NONE', label: 'No breakdown', master: null, filterKey: null }
 ];
+
+/**
+ * Trip reconciliation: per vehicle load, birds out and what became of them,
+ * weight and money back, what is still owed, and whether it balances.
+ *
+ * @param {Object} filters { startDate, endDate, routeId?, driverId?, vehicleId? }
+ */
+export const fetchTripReconciliation = async (filters) => {
+  const response = await apiClient.post('/reports/sales/reconciliation', filters);
+  return response.data;
+};
