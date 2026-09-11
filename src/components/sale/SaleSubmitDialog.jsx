@@ -26,6 +26,26 @@ import {
 const money = (value) => `₹${(Number(value) || 0).toLocaleString('en-IN')}`;
 const count = (value) => (Number(value) || 0).toLocaleString('en-IN');
 
+/**
+ * What the customer will actually receive, named channel by channel.
+ *
+ * The two are independent and carry different things - the SMS states the balance,
+ * the WhatsApp message the day's birds, weight and amount - so "a message will be
+ * sent" is not enough to confirm against.
+ */
+const describeMessaging = ({ sendSms, sendWhatsapp }) => {
+  if (sendSms && sendWhatsapp) {
+    return 'Customers will be sent an SMS with their balance and a WhatsApp message with the day\'s detail.';
+  }
+  if (sendWhatsapp) {
+    return 'Customers will be sent a WhatsApp message with the day\'s detail.';
+  }
+  if (sendSms) {
+    return 'Customers will be sent an SMS with their balance.';
+  }
+  return 'No customer messages will be sent.';
+};
+
 const Row = ({ label, value, bold = false, color }) => (
   <TableRow>
     <TableCell
@@ -166,9 +186,7 @@ const SaleSubmitDialog = ({
         </Table>
 
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-          {summary.sendSms
-            ? 'Customers will be sent a message after saving.'
-            : 'No customer messages will be sent.'}
+          {describeMessaging(summary)}
         </Typography>
       </DialogContent>
 

@@ -32,7 +32,8 @@ import {
   LocalShipping as VehicleIcon,
   Person as DriverIcon,
   Agriculture as FarmIcon,
-  Message as MessageIcon
+  Message as MessageIcon,
+  WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getTripContext } from '../service/SalesService';
 import UserService from '../service/UserService';
@@ -79,6 +80,51 @@ const balanceColor = (balance) => {
 };
 
 const cellInputSx = { '& .MuiInputBase-input': { fontSize: '0.85rem', py: '6px' } };
+
+/**
+ * One channel's on/off control.
+ *
+ * The two channels are independent rather than a choice between them: SMS and
+ * WhatsApp each have their own approved template, are queued as separate messages,
+ * and either can be turned off without affecting the other. Extracted so both look
+ * and behave identically instead of being two copies of the same forty lines.
+ */
+const ChannelToggle = ({ icon, label, on, onChange, colour, onText, offText }) => (
+  <Box
+    sx={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 1,
+      border: '1px solid',
+      borderColor: on ? `${colour}.main` : 'grey.300',
+      borderRadius: 2,
+      px: 0.5,
+      py: 0.5,
+      bgcolor: 'white',
+      transition: 'all 0.3s ease',
+      '&:hover': {
+        borderColor: `${colour}.main`,
+        boxShadow: on ? '0 2px 8px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.1)'
+      }
+    }}
+  >
+    {icon}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: on ? `${colour}.main` : 'text.secondary' }}>
+        {label}
+      </Typography>
+      <Typography variant="caption" sx={{ color: on ? `${colour}.dark` : 'text.disabled', lineHeight: 1 }}>
+        {on ? onText : offText}
+      </Typography>
+    </Box>
+    <Switch
+      checked={Boolean(on)}
+      onChange={(event) => onChange(event.target.checked)}
+      color={colour}
+      size="medium"
+    />
+  </Box>
+);
 
 /**
  * One customer row.
@@ -170,7 +216,8 @@ const SalesEntry = () => {
     mortality: '',
     returnToFarm: '',
     description: '',
-    sendSms: true
+    sendSms: true,
+    sendWhatsapp: false
   });
 
   const [masterData, setMasterData] = useState({
@@ -488,7 +535,8 @@ const SalesEntry = () => {
       totalAmount: totals.amount,
       totalPaymentReceived: totals.payment,
       totalPending: totals.pending,
-      sendSms: formData.sendSms
+      sendSms: formData.sendSms,
+      sendWhatsapp: formData.sendWhatsapp
     };
 
     setUiState(prev => ({ ...prev, submitting: true }));
@@ -517,7 +565,8 @@ const SalesEntry = () => {
       mortality: '',
       returnToFarm: '',
       description: '',
-      sendSms: true
+      sendSms: true,
+      sendWhatsapp: false
     });
     setSalesData([]);
     setSearchQuery('');
@@ -973,55 +1022,31 @@ const SalesEntry = () => {
               Clear Form
             </Button>
 
-           {/* Enhanced SMS Toggle - No background color when on */}
-<Box sx={{ 
-  display: 'flex', 
-  alignItems: 'center',
-  gap: 1,
-  border: '1px solid',
-  borderColor: formData.sendSms ? 'primary.main' : 'grey.300',
-  borderRadius: 2,
-  px: 0.5,
-  py: 0.5,
-  bgcolor: 'white', // Always white background
-  transition: 'all 0.3s ease',
-  '&:hover': {
-    borderColor: 'primary.main',
-    bgcolor: 'white', // Keep white on hover too
-    boxShadow: formData.sendSms ? '0 2px 8px rgba(21, 101, 192, 0.2)' : '0 1px 4px rgba(0,0,0,0.1)'
-  }
-}}>
-  <MessageIcon 
-    color={formData.sendSms ? 'primary' : 'disabled'} 
-    sx={{ fontSize: 24 }}
-  />
-  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-    <Typography 
-      variant="body2" 
-      sx={{ 
-        fontWeight: 600,
-        color: formData.sendSms ? 'primary.main' : 'text.secondary'
-      }}
-    >
-      SMS Notification
-    </Typography>
-    <Typography 
-      variant="caption" 
-      sx={{ 
-        color: formData.sendSms ? 'primary.dark' : 'text.disabled',
-        lineHeight: 1
-      }}
-    >
-      {formData.sendSms ? 'Send to customers' : 'Not sending'}
-    </Typography>
-  </Box>
-  <Switch
-    checked={formData.sendSms}
-    onChange={(e) => handleFormChange('sendSms', e.target.checked)}
-    color="primary"
-    size="medium"
-  />
-</Box>
+          {/*
+            Two independent channels. Both can be on: the SMS carries the balance,
+            the WhatsApp message carries the day's birds, weight, amount and paid.
+            Each is queued separately because each has its own approved template, so
+            one being rejected does not take the other with it.
+          */}
+          <ChannelToggle
+            icon={<MessageIcon sx={{ fontSize: 24 }} color={formData.sendSms ? 'primary' : 'disabled'} />}
+            label="SMS"
+            on={formData.sendSms}
+            onChange={(value) => handleFormChange('sendSms', value)}
+            colour="primary"
+            onText="Balance by SMS"
+            offText="Not sending"
+          />
+
+          <ChannelToggle
+            icon={<WhatsAppIcon sx={{ fontSize: 24 }} color={formData.sendWhatsapp ? 'success' : 'disabled'} />}
+            label="WhatsApp"
+            on={formData.sendWhatsapp}
+            onChange={(value) => handleFormChange('sendWhatsapp', value)}
+            colour="success"
+            onText="Day's detail"
+            offText="Not sending"
+          />
 
           </Box>
         </Container>

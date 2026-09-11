@@ -133,7 +133,10 @@ export const buildSaleSummary = ({ formData, lines, totals, birdCheck, labels = 
   vehicle: labels.vehicle ?? formData?.selectedVehicle ?? '',
   driver: labels.driver ?? formData?.selectedDriver ?? '',
   description: formData?.description ?? '',
+  // Independent channels, both reported so the confirmation screen can say exactly
+  // what the customer will receive.
   sendSms: Boolean(formData?.sendSms),
+  sendWhatsapp: Boolean(formData?.sendWhatsapp),
   customerCount: lines?.length ?? 0,
   birds: {
     loaded: birdCheck?.totalBirds ?? 0,
