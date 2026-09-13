@@ -11,6 +11,12 @@ The paths inside both scripts already match where the apps live on this
 Mac (/Users/sohelchickencentre/SOHEL/...). If those ever move, open the
 .command file in TextEdit and change the two folder lines at the top.
 
+Start SCC.command always runs the backend as ENV=prod - the app refuses to
+guess which database to use, and this is the shop's real one. It finds the
+backend jar whether it was built fresh (mvnw package leaves it in target/)
+or copied to the project root by hand; either location works without
+editing anything.
+
 
 IF DOUBLE-CLICKING DOES NOTHING THE FIRST TIME
 -----------------------------------------------
@@ -36,9 +42,12 @@ address the phone will be visiting from.
      ipconfig getifaddr en0
    (try en1 instead of en0 if that prints nothing)
 
-2. In the backend folder, open src/main/resources/application-dev.properties
-   and change this line - ADD to it, do not replace it:
-     frontend.url=http://localhost:3000,http://THAT-ADDRESS:3000
+2. In the backend folder's .env file, add this line (create it if it is not
+   already there) - THAT-ADDRESS is what step 1 printed:
+     FRONTEND_URL=http://localhost:3000,http://THAT-ADDRESS:3000
+
+   (This app always runs as the "prod" profile here, which reads the allowed
+   address from .env rather than from a file in the source code.)
 
 3. Restart the backend (Stop, then Start again) for the change to take
    effect.

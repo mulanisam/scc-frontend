@@ -32,11 +32,33 @@ if is_running "$STATE_DIR/backend.pid"; then
 elif [ ! -d "$BACKEND_DIR" ]; then
   echo "! Cannot find $BACKEND_DIR - backend not started."
 else
+  # cd to the project root, not wherever the jar happens to sit, and stay there
+  # for the java invocation below. .env is read via a path relative to the
+  # process's working directory (spring.config.import=optional:file:./.env),
+  # and it lives next to pom.xml - not inside target/. Running from inside
+  # target/ finds a jar just fine and silently loads no .env at all, which
+  # looks like the app started but reaches no real database and no messaging.
   cd "$BACKEND_DIR" || exit 1
-  nohup java -jar "$BACKEND_JAR" > "$STATE_DIR/backend.log" 2>&1 &
-  echo $! > "$STATE_DIR/backend.pid"
-  echo "Backend starting (pid $!). If anything goes wrong, the reason is in:"
-  echo "  $STATE_DIR/backend.log"
+
+  # The jar sits directly here if it was copied there by hand (the original
+  # workflow); a plain git clone + `mvn package` instead leaves it in target/.
+  # Resolved once, from the project root, so .env is found either way.
+  JAR_PATH="$BACKEND_JAR"
+  if [ ! -f "$JAR_PATH" ] && [ -f "target/$BACKEND_JAR" ]; then
+    JAR_PATH="target/$BACKEND_JAR"
+  fi
+
+  if [ ! -f "$JAR_PATH" ]; then
+    echo "! No jar found at $BACKEND_DIR/$BACKEND_JAR or target/$BACKEND_JAR - build it first (mvnw package)."
+  else
+    # ENV has no default on purpose - the app refuses to start rather than
+    # guess which database it should be trading against. This is the shop's
+    # real deployment, so it is always prod here.
+    ENV=prod nohup java -jar "$JAR_PATH" > "$STATE_DIR/backend.log" 2>&1 &
+    echo $! > "$STATE_DIR/backend.pid"
+    echo "Backend starting (pid $!). If anything goes wrong, the reason is in:"
+    echo "  $STATE_DIR/backend.log"
+  fi
 fi
 
 # ---- Frontend -------------------------------------------------------------
