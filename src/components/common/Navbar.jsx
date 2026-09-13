@@ -25,6 +25,7 @@ import {
   ShoppingBasket as PurchaseIcon,
   TrendingUp as TradingIcon,
   Storage as MasterIcon,
+  Forum as MessagingIcon,
   Assessment as ReportsIcon,
   Logout as LogoutIcon,
   Person as ProfileIcon,
@@ -84,6 +85,7 @@ function Navbar() {
       { name: 'Purchase', path: '/purchase', icon: <PurchaseIcon />, auth: true },
       { name: 'Ledger', path: '/ledger', icon: <LedgerIcon />, auth: true },
       { name: 'Masters', path: '/master-data', icon: <MasterIcon />, auth: true },
+      { name: 'Messaging', path: '/messaging', icon: <MessagingIcon />, auth: true },
       { name: 'Reports', path: '/reports', icon: <ReportsIcon />, auth: true }
     ];
 

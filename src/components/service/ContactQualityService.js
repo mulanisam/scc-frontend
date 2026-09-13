@@ -25,8 +25,18 @@ export const fetchContactQuality = async () => {
  * out. The server rejects an invalid number and a number already held by another
  * customer, with the reason in the message.
  */
-export const updateCustomerMobile = async (customerId, mobileNo) => {
-  const response = await apiClient.patch(`/user/customers/${customerId}/mobile`, { mobileNo });
+/**
+ * Sets one of a customer's two numbers.
+ *
+ * @param {boolean} alternate true for the shop's second number. A blank value clears
+ *   it; the main number cannot be cleared, only replaced, because blanking it would
+ *   make a reachable customer unreachable.
+ */
+export const updateCustomerMobile = async (customerId, mobileNo, alternate = false) => {
+  const response = await apiClient.patch(
+    `/user/customers/${customerId}/mobile`,
+    { mobileNo, alternate }
+  );
   return response.data;
 };
 

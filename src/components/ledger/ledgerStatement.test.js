@@ -6,7 +6,6 @@ import {
   formatStatementDate,
   formatWeight
 } from './ledgerStatement';
-import { amountInWords } from './ledgerStatementPdf';
 
 /** A statement payload shaped exactly like the server's. */
 const payload = {
@@ -163,21 +162,10 @@ describe('formatting', () => {
   });
 });
 
-describe('amountInWords', () => {
-  it('groups the Indian way', () => {
-    expect(amountInWords(15500)).toBe('Rupees Fifteen Thousand Five Hundred only');
-    expect(amountInWords(20367247)).toBe('Rupees Two Crore Three Lakh Sixty Seven Thousand Two Hundred Forty Seven only');
-  });
-
-  it('states paise separately', () => {
-    expect(amountInWords(1250.75)).toBe('Rupees One Thousand Two Hundred Fifty and Seventy Five Paise only');
-  });
-
-  it('reads a credit balance as its magnitude', () => {
-    expect(amountInWords(-500)).toBe('Rupees Five Hundred only');
-  });
-
-  it('says nil for a settled account', () => {
-    expect(amountInWords(0)).toBe('Rupees Nil');
-  });
-});
+/*
+ * amountInWords moved to the server, along with the rest of the PDF.
+ *
+ * Its cases now live in StatementFormatParityTest on the Java side - the same four
+ * values, asserted against StatementFormat.amountInWords, plus the fixture in
+ * statement-format-cases.txt that was generated from this module before it was removed.
+ */

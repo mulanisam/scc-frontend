@@ -51,7 +51,6 @@ import {
   percent,
   rate,
   shortDate,
-  summariseTrend,
   weight
 } from './dashboardFormat';
 
@@ -63,9 +62,17 @@ import {
  * morning before the first trip is entered it showed seven zeros, which is why it
  * told nobody anything.
  *
- * The shape now follows how the day is actually run: what happened on the chosen
- * day against the day before, a fortnight of trend, then route by route, then who
- * owes money, then the purchase side, then the things that need fixing.
+ * A second pass dropped the fortnight table this used to carry - eleven columns
+ * and fifteen rows, most of it a repeat of the day's own headline figures - and
+ * put a single "Today's activity" panel in its place: trip and sale counts, the
+ * bird tally and the weight tally, each a short row rather than a grid of cells.
+ * A dashboard is read standing up between trips, not studied at a desk, so the
+ * fortnight of history that panel carried belongs on a report someone opens on
+ * purpose, not on the page that has to be read in ten seconds.
+ *
+ * The shape follows how the day is actually run: what happened on the chosen day
+ * against the day before, that day in full, then route by route, then who owes
+ * money, then the purchase side, then the things that need fixing.
  */
 
 const numeric = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
@@ -119,6 +126,21 @@ const KpiTile = ({ icon, label, value, sub, delta, tone = 'primary.main' }) => (
       <Typography variant="caption" color="text.secondary">{sub}</Typography>
     </Box>
   </Paper>
+);
+
+/**
+ * One number with its label underneath, centred.
+ *
+ * The shape the bird-movement chain already used; pulled out so the activity and
+ * weight rows in "Today's activity" can share it instead of repeating the markup.
+ */
+const StatItem = ({ label, value, tone = 'text.primary' }) => (
+  <Box sx={{ textAlign: 'center', minWidth: 68 }}>
+    <Typography variant="h6" sx={{ fontWeight: 700, color: tone, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+      {value}
+    </Typography>
+    <Typography variant="caption" color="text.secondary">{label}</Typography>
+  </Box>
 );
 
 /** Label and value on one line, the pattern used in every summary panel. */
@@ -187,7 +209,6 @@ const Dashboard = () => {
     };
   }, [day, previous]);
 
-  const trend = useMemo(() => summariseTrend(overview?.dailyTrend), [overview]);
   const routes = routeWindow === 'day' ? (overview?.routesOnDay ?? []) : (overview?.routesMonthToDate ?? []);
   const pendingTile = day ? describePending(day.pending, day.amount, day.received) : null;
 
@@ -335,190 +356,103 @@ const Dashboard = () => {
             </Grid>
           </Grid>
 
-          {/* The invariant, for the selected day */}
-          <Paper elevation={1} sx={{ mt: 2, p: 1.75 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 }, flexWrap: 'wrap' }}>
-              <Box>
-                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>
-                  Bird movement · {shortDate(overview.asOfDate)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Loaded must equal sold plus mortality plus returns
-                </Typography>
-              </Box>
+          {/*
+            Today's activity - one panel for everything about the selected day.
 
-              {[
-                { label: 'Loaded', value: count(day.birdsLoaded), tone: 'text.primary' },
-                { label: 'Sold', value: count(day.birdsSold), tone: 'primary.main' },
-                { label: 'Mortality', value: count(day.mortality), tone: 'error.main' },
-                { label: 'Returned to farm', value: count(day.returnToFarm), tone: 'warning.dark' }
-              ].map((item, index) => (
-                <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 } }}>
-                  {index > 0 && (
-                    <Typography variant="h6" color="text.disabled" sx={{ fontWeight: 300 }}>
-                      {index === 1 ? '=' : '+'}
-                    </Typography>
-                  )}
-                  <Box sx={{ textAlign: 'center', minWidth: 68 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700, color: item.tone, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
-                      {item.value}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">{item.label}</Typography>
-                  </Box>
-                </Box>
-              ))}
-
-              <Box sx={{ ml: 'auto', textAlign: 'right' }}>
-                {dayTally === null ? (
-                  <Typography variant="body2" color="text.secondary">No trip recorded for this day</Typography>
-                ) : dayTally === 0 ? (
-                  <Chip color="success" label="Tallies exactly" />
-                ) : (
-                  <>
-                    <Chip
-                      color="error"
-                      label={`${dayTally > 0 ? '+' : ''}${count(dayTally)} birds unaccounted for`}
-                    />
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                      {dayTally > 0 ? 'Loaded more than the trip accounts for' : 'Accounted for more than were loaded'}
-                    </Typography>
-                  </>
-                )}
-              </Box>
-            </Box>
-          </Paper>
-
-          {/* Day by day, with the bird tally */}
+            This replaces two things at once: a 14-day table (11 columns x 15 rows) that
+            was the densest block on the page and duplicated figures already on the KPI
+            tiles above it, and a separate bird-movement strip that sat apart from every
+            other panel's Card + PanelHeading convention. Folded together, the day gets a
+            single readable summary instead of a wall of numbers - activity counts, the
+            bird tally, and the weight tally, each a short scannable row rather than a
+            grid of cells.
+          */}
           <Card elevation={2} sx={{ mt: 2 }}>
             <CardContent>
               <PanelHeading
-                title="Day by day, last 14 days"
-                note={`${count(trend.tradingDays)} trading days of ${count(trend.calendarDays)} · ${compactMoney(trend.total)} billed · ${compactMoney(trend.collected)} collected · average ${money(trend.averagePerTradingDay)} per trading day`}
-                action={trend.tally && (
-                  <Chip
-                    size="small"
-                    color={trend.tally.daysNotTallying === 0 ? 'success' : 'error'}
-                    variant={trend.tally.daysNotTallying === 0 ? 'filled' : 'outlined'}
-                    label={
-                      trend.tally.daysNotTallying === 0
-                        ? 'Every day tallies'
-                        : `${trend.tally.daysNotTallying} of ${trend.tally.daysWithTrips} days do not tally`
-                    }
-                  />
-                )}
+                title={`Today's activity · ${shortDate(overview.asOfDate)}`}
+                note="Trips, deliveries and whether the bird and weight counts add up"
               />
 
-              <Box sx={{ overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Trips</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Loaded</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Sold</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Mortality</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>To farm</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Tally</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Weight (kg)</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Rate/kg</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Billed</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>Collected</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {overview.dailyTrend.map((point) => {
-                      const isSelected = point.date === overview.asOfDate;
-                      const hasTrips = point.birdsLoaded > 0 || point.tripCount > 0;
-                      return (
-                        <TableRow
-                          key={point.date}
-                          hover
-                          sx={{
-                            bgcolor: isSelected ? 'action.selected' : undefined,
-                            opacity: point.traded ? 1 : 0.55
-                          }}
-                        >
-                          <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: isSelected ? 700 : 500 }}>
-                            {point.label}
-                            <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
-                              {point.weekday}
-                            </Typography>
-                          </TableCell>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
+                ACTIVITY
+              </Typography>
+              <Stack direction="row" spacing={{ xs: 3, md: 5 }} sx={{ mt: 0.5, mb: 2 }} flexWrap="wrap">
+                <StatItem label="Trips" value={count(day.tripCount)} />
+                <StatItem label="Sale transactions" value={count(day.saleCount)} />
+                <StatItem label="Customers served" value={count(day.customerCount)} />
+              </Stack>
 
-                          {point.traded ? (
-                            <>
-                              <TableCell sx={numeric}>{count(point.tripCount)}</TableCell>
-                              <TableCell sx={numeric}>{count(point.birdsLoaded)}</TableCell>
-                              <TableCell sx={{ ...numeric, fontWeight: 600 }}>{count(point.birdsSold)}</TableCell>
-                              <TableCell sx={{ ...numeric, color: point.mortality > 0 ? 'error.main' : 'text.disabled' }}>
-                                {point.mortality > 0 ? count(point.mortality) : '—'}
-                              </TableCell>
-                              <TableCell sx={{ ...numeric, color: point.returnToFarm > 0 ? 'warning.dark' : 'text.disabled' }}>
-                                {point.returnToFarm > 0 ? count(point.returnToFarm) : '—'}
-                              </TableCell>
-                              <TableCell sx={numeric}>
-                                {!hasTrips ? (
-                                  <Typography variant="caption" color="text.disabled">no trip</Typography>
-                                ) : point.tallies ? (
-                                  <Chip
-                                    size="small"
-                                    color="success"
-                                    variant="outlined"
-                                    label="tallies"
-                                    sx={{ height: 19, '& .MuiChip-label': { px: 0.7, fontSize: 10.5 } }}
-                                  />
-                                ) : (
-                                  <Tooltip title={`Loaded minus sold, mortality and returns leaves ${point.birdTally} bird(s) unaccounted for`}>
-                                    <Chip
-                                      size="small"
-                                      color="error"
-                                      label={point.birdTally > 0 ? `+${point.birdTally}` : `${point.birdTally}`}
-                                      sx={{ height: 19, '& .MuiChip-label': { px: 0.7, fontSize: 10.5, fontWeight: 700 } }}
-                                    />
-                                  </Tooltip>
-                                )}
-                              </TableCell>
-                              <TableCell sx={numeric}>{weight(point.weight)}</TableCell>
-                              <TableCell sx={numeric}>
-                                {point.weight > 0 ? rate(point.amount / point.weight) : '—'}
-                              </TableCell>
-                              <TableCell sx={{ ...numeric, fontWeight: 600 }}>{money(point.amount)}</TableCell>
-                              <TableCell sx={{ ...numeric, color: 'success.main' }}>{money(point.received)}</TableCell>
-                            </>
-                          ) : (
-                            <TableCell colSpan={10} sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
-                              No trading recorded
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      );
-                    })}
+              <Divider sx={{ mb: 2 }} />
 
-                    <TableRow sx={{ bgcolor: 'action.hover' }}>
-                      <TableCell sx={{ fontWeight: 700 }}>14-day total</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>{count(trend.tally.tripCount)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>{count(trend.tally.birdsLoaded)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>{count(trend.tally.birdsSold)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700, color: 'error.main' }}>{count(trend.tally.mortality)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700, color: 'warning.dark' }}>{count(trend.tally.returnToFarm)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700, color: trend.tally.total === 0 ? 'success.main' : 'error.main' }}>
-                        {trend.tally.total === 0 ? '0' : (trend.tally.total > 0 ? `+${trend.tally.total}` : trend.tally.total)}
-                      </TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>{weight(trend.tally.weight)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>
-                        {trend.tally.weight > 0 ? rate(trend.total / trend.tally.weight) : '—'}
-                      </TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700 }}>{money(trend.total)}</TableCell>
-                      <TableCell sx={{ ...numeric, fontWeight: 700, color: 'success.main' }}>{money(trend.collected)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
+                BIRD MOVEMENT
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 }, flexWrap: 'wrap', mt: 0.5 }}>
+                {[
+                  { label: 'Loaded', value: count(day.birdsLoaded), tone: 'text.primary' },
+                  { label: 'Sold', value: count(day.birdsSold), tone: 'primary.main' },
+                  { label: 'Mortality', value: count(day.mortality), tone: 'error.main' },
+                  { label: 'Returned to farm', value: count(day.returnToFarm), tone: 'warning.dark' }
+                ].map((item, index) => (
+                  <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 } }}>
+                    {index > 0 && (
+                      <Typography variant="h6" color="text.disabled" sx={{ fontWeight: 300 }}>
+                        {index === 1 ? '=' : '+'}
+                      </Typography>
+                    )}
+                    <StatItem label={item.label} value={item.value} tone={item.tone} />
+                  </Box>
+                ))}
+
+                <Box sx={{ ml: 'auto', textAlign: 'right' }}>
+                  {dayTally === null ? (
+                    <Typography variant="body2" color="text.secondary">No trip recorded for this day</Typography>
+                  ) : dayTally === 0 ? (
+                    <Chip color="success" label="Tallies exactly" />
+                  ) : (
+                    <>
+                      <Chip
+                        color="error"
+                        label={`${dayTally > 0 ? '+' : ''}${count(dayTally)} birds unaccounted for`}
+                      />
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                        {dayTally > 0 ? 'Loaded more than the trip accounts for' : 'Accounted for more than were loaded'}
+                      </Typography>
+                    </>
+                  )}
+                </Box>
               </Box>
 
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                Tally is birds loaded minus birds sold, mortality and returns to farm, taken from the trip
-                record. It must come to zero; anything else is birds the day cannot account for.
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
+                WEIGHT
               </Typography>
+              {/*
+                weightLoaded is 0 for a trip where nobody weighed the load at the farm,
+                which is most trips recorded before that field existed - 0 there means
+                "not recorded", not "nothing loaded". Showing a gap against an unrecorded
+                weight would report shrinkage that was never measured, so this only
+                appears once there is a real loaded figure to check sold weight against.
+              */}
+              {Number(day.weightLoaded) > 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 }, flexWrap: 'wrap', mt: 0.5 }}>
+                  <StatItem label="Loaded (kg)" value={weight(day.weightLoaded)} />
+                  <Typography variant="h6" color="text.disabled" sx={{ fontWeight: 300 }}>=</Typography>
+                  <StatItem label="Sold (kg)" value={weight(day.weightSold)} tone="primary.main" />
+                  <Typography variant="h6" color="text.disabled" sx={{ fontWeight: 300 }}>+</Typography>
+                  <StatItem
+                    label="Gap (shrinkage)"
+                    value={weight(day.weightGap)}
+                    tone={Number(day.weightGap) > 0 ? 'warning.dark' : 'text.primary'}
+                  />
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Loaded weight was not recorded for this day, so shrinkage in transit cannot be checked.
+                </Typography>
+              )}
             </CardContent>
           </Card>
 

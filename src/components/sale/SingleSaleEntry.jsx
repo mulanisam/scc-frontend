@@ -16,6 +16,7 @@ import {
 import { PostAdd as SingleIcon, CalendarToday as DateIcon } from '@mui/icons-material';
 import { createSingleSale, getRoutes, getDrivers, getVehicles, getCustomersByRoute } from '../service/SalesService';
 import { calculateAmount } from '../../utils/businessRules';
+import MessageChannelToggles from '../common/MessageChannelToggles';
 
 const SingleSaleEntry = () => {
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,17 @@ const SingleSaleEntry = () => {
     amount: '',
     payment: '',
     paymentMode: 'CASH',
-    description: ''
+    description: '',
+    /*
+     * The same two switches the bulk screen has.
+     *
+     * A single sale is the one entered after the trip has gone out - a customer served late,
+     * or a line corrected - so it is precisely the case where the customer has not already
+     * had the day's message. The server has accepted both flags all along; this screen
+     * offered neither, so a sale entered here told the customer nothing.
+     */
+    sendSms: true,
+    sendWhatsapp: false
   });
 
   useEffect(() => {
@@ -106,16 +117,19 @@ const SingleSaleEntry = () => {
         amount: parseInt(formData.amount),
         payment: parseInt(formData.payment) || 0,
         paymentMode: formData.paymentMode,
-        description: formData.description
+        description: formData.description,
+        sendSms: formData.sendSms,
+        sendWhatsapp: formData.sendWhatsapp
       };
 
       await createSingleSale(saleData);
-      setSuccess('Sale created successfully!');
-      
+      setSuccess(describeSaved(formData));
+
       // Reset form
       setFormData({
         date: new Date().toISOString().split('T')[0],
         customerId: '',
+        // Route, vehicle and driver are kept: single entries come in runs for one trip.
         routeId: formData.routeId,
         vehicleId: formData.vehicleId,
         driverId: formData.driverId,
@@ -125,13 +139,34 @@ const SingleSaleEntry = () => {
         amount: '',
         payment: '',
         paymentMode: 'CASH',
-        description: ''
+        description: '',
+        // Kept for the same reason - the next entry is usually messaged the same way.
+        sendSms: formData.sendSms,
+        sendWhatsapp: formData.sendWhatsapp
       });
     } catch (err) {
-      setError(err.response?.data || 'Failed to create sale');
+      /*
+       * The server's message, not the raw response object.
+       *
+       * err.response.data is a { message, ... } body for every refusal the handler
+       * produces, so putting it in state rendered "[object Object]" for exactly the
+       * failures worth reading - a bird count that does not reconcile, a future date, a
+       * credit limit.
+       */
+      const data = err.response?.data;
+      setError((typeof data === 'string' && data.trim() ? data : data?.message)
+        || err.message || 'The sale could not be saved.');
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Says what was saved and who was told, so the toggles visibly did something. */
+  const describeSaved = ({ sendSms, sendWhatsapp }) => {
+    if (sendSms && sendWhatsapp) return 'Sale saved. An SMS and a WhatsApp message are queued.';
+    if (sendWhatsapp) return 'Sale saved. A WhatsApp message is queued.';
+    if (sendSms) return 'Sale saved. An SMS is queued.';
+    return 'Sale saved. No message was sent.';
   };
 
   return (
@@ -337,6 +372,24 @@ const SingleSaleEntry = () => {
                 multiline
                 rows={2}
               />
+            </Grid>
+
+            {/*
+              Telling the customer, on the same two channels as the bulk screen.
+
+              Disabled until a customer is chosen: before that there is no number to send
+              to, and a switch left on for nobody reads as a message that went.
+            */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                <MessageChannelToggles
+                  kind="sale"
+                  sendSms={formData.sendSms}
+                  sendWhatsapp={formData.sendWhatsapp}
+                  onChange={(field, value) => setFormData(prev => ({ ...prev, [field]: value }))}
+                  disabled={!formData.customerId}
+                />
+              </Box>
             </Grid>
 
             <Grid item xs={12}>

@@ -140,7 +140,11 @@ describe('ContactQuality', () => {
     // Enter saves, so a list of 130 can be worked without reaching for the mouse.
     await userEvent.type(input, '98765 43211{enter}');
 
-    await waitFor(() => expect(updateCustomerMobile).toHaveBeenCalledWith(501, '98765 43211'));
+    // The third argument says which of the customer's two numbers this is. false here,
+    // because this editor writes the main one; the second-number editor beside it passes
+    // true. Asserted rather than ignored - sending it the wrong way round would quietly
+    // overwrite a working number with a fallback.
+    await waitFor(() => expect(updateCustomerMobile).toHaveBeenCalledWith(501, '98765 43211', false));
     // Confirmed in place, so a long list shows what has been done.
     expect(await within(row).findByText('98765 43211')).toBeInTheDocument();
   });

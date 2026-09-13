@@ -19,8 +19,7 @@ import {
   InputAdornment,
   Card,
   CardContent,
-  CardHeader,
-  Switch
+  CardHeader
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -31,9 +30,7 @@ import {
   Route as RouteIcon,
   LocalShipping as VehicleIcon,
   Person as DriverIcon,
-  Agriculture as FarmIcon,
-  Message as MessageIcon,
-  WhatsApp as WhatsAppIcon
+  Agriculture as FarmIcon
 } from '@mui/icons-material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getTripContext } from '../service/SalesService';
 import UserService from '../service/UserService';
@@ -41,6 +38,7 @@ import { Navigate } from 'react-router-dom';
 import { calculateAmount, calculatePending, reconcileBirds, isCompleteSaleLine } from '../../utils/businessRules';
 import { validateSaleDate, checkDuplicateEntry, buildSaleSummary } from '../../utils/saleValidation';
 import SaleSubmitDialog from './SaleSubmitDialog';
+import MessageChannelToggles from '../common/MessageChannelToggles';
 
 // Constants
 const INITIAL_DATE = () => new Date().toISOString().slice(0, 10);
@@ -79,52 +77,43 @@ const balanceColor = (balance) => {
   return 'inherit';
 };
 
-const cellInputSx = { '& .MuiInputBase-input': { fontSize: '0.85rem', py: '6px' } };
+/*
+ * Every sx object a row needs, built once rather than once per cell per render.
+ *
+ * A route's customer list runs to about 70 rows, five inputs and five plain cells each -
+ * roughly 700 style objects. React.memo on SaleRow already stops an untouched row from
+ * re-rendering at all, so this was never the "typing lags" bug; it is the "opening a big
+ * route takes a moment" one, because mounting still builds and hands every one of those
+ * objects to emotion for hashing on the way in. The four numeric fields share a width each,
+ * so those five combinations are the only shapes an input cell ever takes.
+ */
+const CELL_INPUT_SX = { '& .MuiInputBase-input': { fontSize: '0.85rem', py: '6px' } };
+const NUMERIC_INPUT_SX = {
+  birds: { width: 80, ...CELL_INPUT_SX },
+  kilograms: { width: 90, ...CELL_INPUT_SX },
+  rate: { width: 90, ...CELL_INPUT_SX },
+  payment: { width: 100, ...CELL_INPUT_SX }
+};
+const DESCRIPTION_INPUT_SX = { width: 140, ...CELL_INPUT_SX };
+
+const ROW_SX = { normal: { bgcolor: 'inherit', '& td': { py: 0.5 } }, dimmed: { bgcolor: 'action.hover', '& td': { py: 0.5 } } };
+const NAME_CELL_SX = { fontWeight: 500, fontSize: '0.85rem', whiteSpace: 'nowrap' };
+const CITY_CELL_SX = { fontSize: '0.85rem', whiteSpace: 'nowrap' };
+const DERIVED_CELL_SX = { fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' };
 
 /**
- * One channel's on/off control.
+ * The balance cell's style, from a fixed set of four combinations.
  *
- * The two channels are independent rather than a choice between them: SMS and
- * WhatsApp each have their own approved template, are queued as separate messages,
- * and either can be turned off without affecting the other. Extracted so both look
- * and behave identically instead of being two copies of the same forty lines.
+ * Colour and weight both step at fixed thresholds, so there are only four cells this can
+ * ever be - looked up rather than built fresh for every row on every render.
  */
-const ChannelToggle = ({ icon, label, on, onChange, colour, onText, offText }) => (
-  <Box
-    sx={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 1,
-      border: '1px solid',
-      borderColor: on ? `${colour}.main` : 'grey.300',
-      borderRadius: 2,
-      px: 0.5,
-      py: 0.5,
-      bgcolor: 'white',
-      transition: 'all 0.3s ease',
-      '&:hover': {
-        borderColor: `${colour}.main`,
-        boxShadow: on ? '0 2px 8px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.1)'
-      }
-    }}
-  >
-    {icon}
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: on ? `${colour}.main` : 'text.secondary' }}>
-        {label}
-      </Typography>
-      <Typography variant="caption" sx={{ color: on ? `${colour}.dark` : 'text.disabled', lineHeight: 1 }}>
-        {on ? onText : offText}
-      </Typography>
-    </Box>
-    <Switch
-      checked={Boolean(on)}
-      onChange={(event) => onChange(event.target.checked)}
-      color={colour}
-      size="medium"
-    />
-  </Box>
-);
+const BALANCE_CELL_SX = {
+  'inherit-400': { fontSize: '0.85rem', textAlign: 'right', color: 'inherit', fontWeight: 400 },
+  'warning.dark-400': { fontSize: '0.85rem', textAlign: 'right', color: 'warning.dark', fontWeight: 400 },
+  'error.dark-700': { fontSize: '0.85rem', textAlign: 'right', color: 'error.dark', fontWeight: 700 }
+};
+const balanceCellSx = (balance) =>
+  BALANCE_CELL_SX[`${balanceColor(balance)}-${balance > 50000 ? 700 : 400}`];
 
 /**
  * One customer row.
@@ -134,48 +123,41 @@ const ChannelToggle = ({ icon, label, on, onChange, colour, onText, offText }) =
  * object identity intact.
  */
 const SaleRow = React.memo(function SaleRow({ customer, row, rowIndex, salesIndex, dimmed, onChange }) {
-  const numericCell = (field, width) => (
+  const numericCell = (field) => (
     <TableCell>
       <TextField
         size="small"
         type="number"
         value={row?.[field] ?? ''}
         onChange={(e) => onChange(salesIndex, field, e.target.value)}
-        sx={{ width, ...cellInputSx }}
+        sx={NUMERIC_INPUT_SX[field]}
         inputProps={{ 'data-row': rowIndex, 'data-field': field }}
       />
     </TableCell>
   );
 
   return (
-    <TableRow hover sx={{ bgcolor: dimmed ? 'action.hover' : 'inherit', '& td': { py: 0.5 } }}>
-      <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+    <TableRow hover sx={dimmed ? ROW_SX.dimmed : ROW_SX.normal}>
+      <TableCell sx={NAME_CELL_SX}>
         {customer.name}
       </TableCell>
-      <TableCell sx={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{customer.city?.name}</TableCell>
+      <TableCell sx={CITY_CELL_SX}>{customer.city?.name}</TableCell>
 
-      {numericCell('birds', 80)}
-      {numericCell('kilograms', 90)}
-      {numericCell('rate', 90)}
+      {numericCell('birds')}
+      {numericCell('kilograms')}
+      {numericCell('rate')}
 
-      <TableCell sx={{ fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' }}>
+      <TableCell sx={DERIVED_CELL_SX}>
         ₹{(row?.amount ?? 0).toLocaleString('en-IN')}
       </TableCell>
 
-      {numericCell('payment', 100)}
+      {numericCell('payment')}
 
-      <TableCell sx={{ fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' }}>
+      <TableCell sx={DERIVED_CELL_SX}>
         ₹{(row?.pending ?? 0).toLocaleString('en-IN')}
       </TableCell>
 
-      <TableCell
-        sx={{
-          fontSize: '0.85rem',
-          textAlign: 'right',
-          color: balanceColor(row?.balanceAmount ?? 0),
-          fontWeight: (row?.balanceAmount ?? 0) > 50000 ? 700 : 400
-        }}
-      >
+      <TableCell sx={balanceCellSx(row?.balanceAmount ?? 0)}>
         ₹{(row?.balanceAmount ?? 0).toLocaleString('en-IN')}
       </TableCell>
 
@@ -184,7 +166,7 @@ const SaleRow = React.memo(function SaleRow({ customer, row, rowIndex, salesInde
           size="small"
           value={row?.description ?? ''}
           onChange={(e) => onChange(salesIndex, 'description', e.target.value)}
-          sx={{ width: 140, ...cellInputSx }}
+          sx={DESCRIPTION_INPUT_SX}
           inputProps={{ 'data-row': rowIndex, 'data-field': 'description' }}
         />
       </TableCell>
@@ -1027,25 +1009,15 @@ const SalesEntry = () => {
             the WhatsApp message carries the day's birds, weight, amount and paid.
             Each is queued separately because each has its own approved template, so
             one being rejected does not take the other with it.
-          */}
-          <ChannelToggle
-            icon={<MessageIcon sx={{ fontSize: 24 }} color={formData.sendSms ? 'primary' : 'disabled'} />}
-            label="SMS"
-            on={formData.sendSms}
-            onChange={(value) => handleFormChange('sendSms', value)}
-            colour="primary"
-            onText="Balance by SMS"
-            offText="Not sending"
-          />
 
-          <ChannelToggle
-            icon={<WhatsAppIcon sx={{ fontSize: 24 }} color={formData.sendWhatsapp ? 'success' : 'disabled'} />}
-            label="WhatsApp"
-            on={formData.sendWhatsapp}
-            onChange={(value) => handleFormChange('sendWhatsapp', value)}
-            colour="success"
-            onText="Day's detail"
-            offText="Not sending"
+            Shared with the payment and trading screens, so all three offer the same
+            control rather than three copies that drift apart.
+          */}
+          <MessageChannelToggles
+            kind="sale"
+            sendSms={formData.sendSms}
+            sendWhatsapp={formData.sendWhatsapp}
+            onChange={handleFormChange}
           />
 
           </Box>

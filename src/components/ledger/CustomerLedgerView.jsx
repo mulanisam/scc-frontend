@@ -44,7 +44,6 @@ import {
   formatStatementDate,
   formatWeight
 } from './ledgerStatement';
-import { exportStatementToPdf } from './ledgerStatementPdf';
 
 /**
  * Statement of account for one customer.
@@ -95,6 +94,7 @@ const CustomerLedgerView = () => {
   const [statement, setStatement] = useState(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,12 +148,37 @@ const CustomerLedgerView = () => {
     return model.showOpeningRow ? [model.openingRow, ...model.rows] : model.rows;
   }, [model]);
 
-  const handleDownload = () => {
-    if (!model) return;
+  /**
+   * Downloads the statement the server renders.
+   *
+   * It used to be drawn here with jsPDF. It moved to the server so the weekly WhatsApp
+   * statement - which a scheduled job sends, with no browser to draw in - is the same
+   * document as this one. Two layouts would have drifted, and a customer comparing the
+   * PDF they downloaded against the one they were sent would have found it.
+   */
+  const handleDownload = async () => {
+    if (!selectedCustomer) return;
+    setDownloading(true);
+    setError('');
     try {
-      exportStatementToPdf(model);
+      const { blob, fileName } = await LedgerService.getCustomerStatementPdf(
+        selectedCustomer.id, startDate, endDate
+      );
+
+      // Anchor-and-revoke: the blob URL has to outlive the click, and leaving it
+      // allocated holds the whole PDF in memory for the life of the page.
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (err) {
       setError(`Could not generate the PDF: ${err.message}`);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -237,16 +262,18 @@ const CustomerLedgerView = () => {
             </Grid>
 
             <Grid item xs={12} md={2}>
-              <Tooltip title="Download the statement of account as a PDF">
+              <Tooltip title="Download the statement of account as a PDF. The same document the weekly WhatsApp statement sends.">
                 <Button
                   fullWidth
                   variant="outlined"
-                  startIcon={<DownloadIcon />}
+                  startIcon={downloading
+                    ? <CircularProgress size={16} color="inherit" />
+                    : <DownloadIcon />}
                   onClick={handleDownload}
-                  disabled={!model || model.rows.length === 0}
+                  disabled={!model || model.rows.length === 0 || downloading}
                   sx={{ height: 40 }}
                 >
-                  Statement PDF
+                  {downloading ? 'Preparing' : 'Statement PDF'}
                 </Button>
               </Tooltip>
             </Grid>

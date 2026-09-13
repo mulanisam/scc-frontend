@@ -66,6 +66,39 @@ export const fetchDrivers = async () => {
     throw error;
   }
 };
+/*
+ * The payables reports.
+ *
+ * Under /adminuser, like the customer and trading ledgers - office staff are the people who
+ * answer a supplier asking what is outstanding, and until now nothing showed it.
+ */
+const REPORTS = '/adminuser/purchases';
+
+const authHeader = () => ({ Authorization: `Bearer ${getToken()}` });
+
+/**
+ * Every supplier with what is still owed them, most owed first.
+ *
+ * The date range bounds what was bought and paid inside it. The outstanding column is always
+ * current, because what we owe is not a question about a date range.
+ */
+export const fetchPayables = async ({ from, to } = {}) => {
+  const response = await axios.get(`${API_BASE_URL}${REPORTS}/payables`, {
+    headers: authHeader(),
+    params: { from: from || undefined, to: to || undefined }
+  });
+  return response.data ?? [];
+};
+
+/** One supplier's ledger and the purchases behind it, with their DC lines. */
+export const fetchSupplierAccount = async (supplierId, { from, to } = {}) => {
+  const response = await axios.get(`${API_BASE_URL}${REPORTS}/suppliers/${supplierId}`, {
+    headers: authHeader(),
+    params: { from: from || undefined, to: to || undefined }
+  });
+  return response.data;
+};
+
 export const fetchPurchaseDetails = async (supplierId, purchaseDate) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/user/purchases/getDetails`, {

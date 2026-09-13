@@ -1,1017 +1,883 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Container,
-  Typography,
-  TextField,
-  Grid,
-  Button,
-  MenuItem,
-  IconButton,
-  Snackbar,
   Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
+  AlertTitle,
   Box,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  Chip,
+  CircularProgress,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Grid,
+  IconButton,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Snackbar,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
+  TableFooter,
   TableHead,
   TableRow,
-  Card,
-  CardContent,
-  CardHeader,
-  InputAdornment,
-  CircularProgress
+  TextField,
+  Tooltip,
+  Typography
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Delete as DeleteIcon,
-  Save as SaveIcon,
-  Clear as ClearIcon,
-  Payment as PaymentIcon,
   AttachFile as AttachFileIcon,
-  Calculate as CalculateIcon,
-  LocalShipping as VehicleIcon,
-  Person as DriverIcon,
   Business as SupplierIcon,
-  LocationOn as BranchIcon,
-  Agriculture as FarmIcon,
-  SupervisorAccount as SupervisorIcon,
-  Phone as PhoneIcon,
+  CalendarToday as DateIcon,
+  Clear as ClearIcon,
+  Delete as DeleteIcon,
   LocalGasStation as DieselIcon,
-  Build as HamaliIcon,
-  MonetizationOn as ExpenseIcon
+  LocalShipping as VehicleIcon,
+  Payment as PaymentIcon,
+  Person as DriverIcon,
+  Save as SaveIcon,
+  WarningAmber as WarnIcon
 } from '@mui/icons-material';
-import { fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase, fetchPurchaseDetails, submitPayment } from '../service/PurchaseService';
+import {
+  fetchSuppliers, fetchVehicles, fetchDrivers, submitPurchase, submitPayment, fetchSupplierAccount
+} from '../service/PurchaseService';
 import { calculateAmount, calculateTotalExpenses } from '../../utils/businessRules';
+import {
+  validatePurchase, orderFilesForUpload, buildPurchaseSummary
+} from '../../utils/purchaseValidation';
+
+/**
+ * Purchase entry.
+ *
+ * Rebuilt to work the way the sales screens do, because it did not: it checked that four
+ * fields were non-empty and sent everything else to a server that trusted whatever arrived.
+ * What that allowed, in the data as it stands - a purchase of 960 birds for ₹0, two identical
+ * purchases on one day, and a payable understated by ₹12,05,020.
+ *
+ * Four things are aligned with sales now:
+ *
+ * - <b>the amount is derived, per line</b>, from weight x rate on the ₹10 rounding rule, and a
+ *   line that disagrees with its own figures is named rather than silently saved
+ * - <b>running totals</b> sit under the lines - birds, weight, amount, average rate - so the
+ *   load is checked against the DC notes before it is submitted, not afterwards
+ * - <b>the date is a rule</b>: nothing future-dated, and backdating says what it will do to the
+ *   supplier's balances
+ * - <b>what the server says is what the screen shows</b>. Every failure used to read "Error
+ *   creating Purchase Entry", which covered a supplier that did not exist, a bad date and a
+ *   disk that could not be written to
+ *
+ * <p>And a scan now belongs to its own line. Every attach button called one handler that
+ * appended to a flat list, and the server pairs files[i] with line i - so a DC scanned against
+ * line 3 was filed as the evidence for line 1.
+ */
+
+const emptyLine = (srNo) => ({ srNo, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' });
+
+const blankForm = () => ({
+  entryDate: new Date().toISOString().slice(0, 10),
+  vehicle: '',
+  driver: '',
+  supplier: '',
+  branch: '',
+  farm: '',
+  supervisorName: '',
+  supervisorPhoneNo: '',
+  driverExpense: '',
+  diesel: '',
+  hamali: ''
+});
+
+const money = (value) => `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 
 const PurchaseEntryPage = () => {
-  const [tableRows, setTableRows] = useState([{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-  
-  const [formData, setFormData] = useState({
-    entryDate: new Date().toISOString().slice(0, 10),
-    vehicle: '',
-    driver: '',
-    supplier: '',
-    branch: '',
-    farm: '',
-    supervisorName: '',
-    supervisorPhoneNo: '',
-    driverExpense: '',
-    diesel: '',
-    hamali: '',
-    dcDetails: tableRows
-  });
-  
+  const [formData, setFormData] = useState(blankForm);
+  const [lines, setLines] = useState([emptyLine(1)]);
+  /** Keyed by line index, so a scan stays with the line it was chosen on. */
+  const [filesByLine, setFilesByLine] = useState({});
+
   const [suppliers, setSuppliers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [paymentData, setPaymentData] = useState({
-    dateOfPurchase: '',
-    dateOfTransaction: '',
-    trans_id: '',
-    totalAmount: '',
-    paidAmount: '',
-    pendingPayment: '',
-    comment: '',
-    supplier: ''
-  });
 
-  const clearPaymentData = () => {
-    setPaymentData({
-      dateOfPurchase: '',
-      dateOfTransaction: '',
-      trans_id: '',
-      totalAmount: '',
-      paidAmount: '',
-      pendingPayment: '',
-      comment: '',
-      supplier: ''
-    });
-  };
+  const [submitting, setSubmitting] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  const say = useCallback((message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [suppliersData, vehiclesData, driversData] = await Promise.all([
-          fetchSuppliers(), 
-          fetchVehicles(), 
-          fetchDrivers()
-        ]);
+    Promise.all([fetchSuppliers(), fetchVehicles(), fetchDrivers()])
+      .then(([suppliersData, vehiclesData, driversData]) => {
         setSuppliers(suppliersData);
         setVehicles(vehiclesData);
         setDrivers(driversData);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setSnackbarMessage('Error fetching data: ' + error.message);
-        setSnackbarSeverity('error');
-        setSnackbarOpen(true);
-      }
-    };
-    fetchData();
-  }, []);
+      })
+      .catch((error) => say(serverMessage(error, 'The master data could not be loaded.'), 'error'));
+  }, [say]);
 
-  const addRow = () => {
-    const newRow = { srNo: tableRows.length + 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' };
-    setTableRows([...tableRows, newRow]);
-  };
-
-  const deleteRow = (index) => {
-    if (tableRows.length === 1) return;
-    const updatedRows = [...tableRows.slice(0, index), ...tableRows.slice(index + 1)];
-    const reindexedRows = updatedRows.map((row, idx) => ({ ...row, srNo: idx + 1 }));
-    setTableRows(reindexedRows);
-    setFormData({ ...formData, dcDetails: reindexedRows });
-  };
-
-  const handleTableChange = (index, field, value) => {
-    const updatedRows = [...tableRows];
-    // Copy the row rather than mutating it in place: the objects are shared
-    // with the previous state, so mutating them edits history too.
-    const row = { ...updatedRows[index], [field]: value };
-
-    if (field === 'rate' || field === 'kilograms') {
-      row.amount = calculateAmount(row.kilograms, row.rate);
-    }
-
-    updatedRows[index] = row;
-    setTableRows(updatedRows);
-    setFormData({ ...formData, dcDetails: updatedRows });
-  };
-
-  const calculateTotalAmount = () =>
-    calculateTotalExpenses({
-      driverExpense: formData.driverExpense,
-      diesel: formData.diesel,
-      hamali: formData.hamali
-    });
-
-  const calculateTotal = (field) => {
-    return tableRows.reduce((total, row) => total + (parseFloat(row[field]) || 0), 0);
-  };
-
-  const handleFileChange = (event) => {
-    const selectedFile = event.target.files[0];
-    const MAX_FILE_SIZE_MB = 5;
-    const fileSizeInMB = selectedFile.size / (1024 * 1024);
-    if (fileSizeInMB > MAX_FILE_SIZE_MB) {
-      setSnackbarMessage(`File size exceeds the maximum allowed size of ${MAX_FILE_SIZE_MB} MB.`);
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      event.target.value = null;
-    } else {
-      setFiles([...files, selectedFile]);
-    }
-  };
-
-  const handleChange = (event) => {
+  const handleField = (event) => {
     const { name, value } = event.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  const handleLineChange = (index, field, value) => {
+    setLines((prev) => prev.map((line, position) => {
+      if (position !== index) return line;
+      const next = { ...line, [field]: value };
+      // Derived on every keystroke, and from the same helper the server uses, so the figure on
+      // screen is the figure that will be billed.
+      if (field === 'kilograms' || field === 'rate') {
+        next.amount = calculateAmount(next.kilograms, next.rate);
+      }
+      return next;
+    }));
+  };
 
-    if (!formData.entryDate || !formData.vehicle || !formData.supplier || !formData.driver) {
-      setSnackbarMessage('Date, Vehicle, Driver, and Supplier are mandatory fields.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      setIsSubmitting(false);
+  const addLine = () => setLines((prev) => [...prev, emptyLine(prev.length + 1)]);
+
+  const removeLine = (index) => {
+    if (lines.length === 1) return;
+    setLines((prev) => prev
+      .filter((line, position) => position !== index)
+      .map((line, position) => ({ ...line, srNo: position + 1 })));
+
+    // The scans shift with the lines. Without this, deleting line 2 leaves line 3's scan
+    // attached to what is now line 2 - the same misfiling, by a different route.
+    setFilesByLine((prev) => {
+      const next = {};
+      Object.entries(prev).forEach(([key, file]) => {
+        const position = Number(key);
+        if (position < index) next[position] = file;
+        else if (position > index) next[position - 1] = file;
+      });
+      return next;
+    });
+  };
+
+  const attachScan = (index, file) => {
+    const MAX_MB = 5;
+    if (file && file.size / (1024 * 1024) > MAX_MB) {
+      say(`That file is larger than ${MAX_MB} MB. Scan it at a lower resolution.`, 'error');
       return;
     }
+    setFilesByLine((prev) => ({ ...prev, [index]: file }));
+  };
 
-    if (tableRows.some(row => !row.nos || !row.kilograms)) {
-      setSnackbarMessage('Quantity and Weight are mandatory in DC details.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      setIsSubmitting(false);
-      return;
+  const detachScan = (index) => setFilesByLine((prev) => {
+    const next = { ...prev };
+    delete next[index];
+    return next;
+  });
+
+  const validation = useMemo(
+    () => validatePurchase({ formData, lines }),
+    [formData, lines]
+  );
+
+  const expenses = useMemo(() => calculateTotalExpenses({
+    driverExpense: formData.driverExpense,
+    diesel: formData.diesel,
+    hamali: formData.hamali
+  }), [formData.driverExpense, formData.diesel, formData.hamali]);
+
+  const labelFor = (list, id, field) =>
+    list.find((item) => String(item.id) === String(id))?.[field] ?? '';
+
+  const summary = useMemo(() => buildPurchaseSummary({
+    formData,
+    lines,
+    labels: {
+      supplier: labelFor(suppliers, formData.supplier, 'name'),
+      vehicle: labelFor(vehicles, formData.vehicle, 'vehicleNo'),
+      driver: labelFor(drivers, formData.driver, 'name'),
+      filesByLine
     }
+  }), [formData, lines, suppliers, vehicles, drivers, filesByLine]);
 
-    const purchaseEntry = {
-      entryDate: formData.entryDate,
-      vehicle: formData.vehicle,
-      driver: formData.driver,
-      supplier: formData.supplier,
-      branch: formData.branch,
-      farm: formData.farm,
-      supervisorName: formData.supervisorName,
-      supervisorPhoneNo: formData.supervisorPhoneNo,
-      driverExpense: formData.driverExpense,
-      diesel: formData.diesel,
-      hamali: formData.hamali,
-      dcDetails: formData.dcDetails
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    const payload = {
+      ...formData,
+      // Each line carries the derived amount, not whatever sat in the box.
+      dcDetails: lines.map((line) => ({
+        dcNo: line.dcNo,
+        nos: Number(line.nos) || 0,
+        kilograms: line.kilograms,
+        rate: line.rate,
+        amount: calculateAmount(line.kilograms, line.rate)
+      }))
     };
 
     const data = new FormData();
-    data.append('purchaseEntry', JSON.stringify(purchaseEntry));
-    files.forEach((file) => {
-      data.append(`files`, file);
+    data.append('purchaseEntry', JSON.stringify(payload));
+    orderFilesForUpload(lines, filesByLine).forEach((file) => {
+      // An empty slot still occupies a position, or the server pairs the wrong scan with the
+      // wrong line. An empty Blob is the placeholder it ignores.
+      data.append('files', file ?? new Blob([]), file ? file.name : 'none');
     });
 
     try {
-      await submitPurchase(data);
-      setSnackbarMessage('Purchase Entry created successfully');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+      const result = await submitPurchase(data);
+      say(result?.message
+        ? `${result.message} — ${money(result.totalAmount)}`
+        : 'Purchase recorded.');
       handleClear();
+      setReviewOpen(false);
     } catch (error) {
-      console.error('Error creating purchase entry:', error);
-      setSnackbarMessage('Error creating Purchase Entry: ' + (error.message || 'Unknown error'));
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      say(serverMessage(error, 'The purchase could not be saved.'), 'error');
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
   const handleClear = () => {
-    setFormData({
-      entryDate: new Date().toISOString().slice(0, 10),
-      vehicle: '',
-      driver: '',
-      supplier: '',
-      branch: '',
-      farm: '',
-      supervisorName: '',
-      supervisorPhoneNo: '',
-      driverExpense: '',
-      diesel: '',
-      hamali: '',
-      dcDetails: [{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]
-    });
-    setTableRows([{ srNo: 1, dcNo: '', nos: '', kilograms: '', rate: '', amount: '' }]);
-    setFiles([]);
-  };
-
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === 'clickaway') return;
-    setSnackbarOpen(false);
-  };
-
-  const handleOpenPaymentDialog = () => {
-    setPaymentDialogOpen(true);
-  };
-
-  const handleClosePaymentDialog = () => {
-    clearPaymentData();
-    setPaymentDialogOpen(false);
-  };
-
-  const handlePaymentChange = async (event) => {
-    const { name, value } = event.target;
-    const newPaymentData = { ...paymentData, [name]: value };
-
-    if ((name === 'supplier' && newPaymentData.dateOfPurchase) || (name === 'dateOfPurchase' && newPaymentData.supplier)) {
-      try {
-        const purchaseDetails = await fetchPurchaseDetails(newPaymentData.supplier, newPaymentData.dateOfPurchase);
-        newPaymentData.totalAmount = purchaseDetails.totalAmount || 0;
-        newPaymentData.paidAmount = purchaseDetails.paidAmount || 0;
-        newPaymentData.pendingPayment = (parseFloat(newPaymentData.totalAmount) - parseFloat(newPaymentData.paidAmount)).toFixed(2);
-      } catch (error) {
-        setSnackbarMessage('Error fetching purchase details.');
-        setSnackbarSeverity('error');
-        setSnackbarOpen(true);
-      }
-    } else {
-      if (name === 'totalAmount' || name === 'paidAmount') {
-        const totalAmount = parseFloat(newPaymentData.totalAmount) || 0;
-        const paidAmount = parseFloat(newPaymentData.paidAmount) || 0;
-        newPaymentData.pendingPayment = (totalAmount - paidAmount).toFixed(2);
-      }
-    }
-    setPaymentData(newPaymentData);
-  };
-
-  const handlePaymentSubmit = async (event) => {
-    event.preventDefault();
-    
-    try {
-      await submitPayment(paymentData);
-      setSnackbarMessage('Payment Entry created successfully');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-      clearPaymentData();
-      setPaymentDialogOpen(false);
-    } catch (error) {
-      console.error('Error creating payment entry:', error);
-      setSnackbarMessage('Error creating Payment Entry: ' + (error.message || 'Unknown error'));
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-    }
+    setFormData(blankForm());
+    setLines([emptyLine(1)]);
+    setFilesByLine({});
   };
 
   return (
-    <Box sx={{ 
-      height: '100%', 
-      display: 'flex', 
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
-      {/* CSS to remove number input arrows */}
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>
-        {`
-          input[type="number"]::-webkit-outer-spin-button,
-          input[type="number"]::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-          }
-          
-          input[type="number"] {
-            -moz-appearance: textfield;
-          }
-        `}
+        {`input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+          input[type="number"] { -moz-appearance: textfield; }`}
       </style>
 
-      {/* Fixed Form Section */}
-      <Box sx={{ flexShrink: 0 }}>
+      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
         <Container maxWidth="xl" sx={{ py: 2 }}>
-          {/* Purchase Information */}
+
+          {/* ---- the trip ------------------------------------------------ */}
           <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
-            <CardHeader 
-              title="Purchase Information" 
-              sx={{ 
-                bgcolor: 'primary.main', 
-                color: 'white',
-                py: 1,
+            <CardHeader
+              title="Purchase — the trip"
+              sx={{
+                bgcolor: 'primary.main', color: 'white', py: 1,
                 '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
               }}
             />
+            <Divider />
             <CardContent sx={{ py: 2 }}>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
-                    fullWidth
-                    label="Entry Date"
-                    type="date"
-                    name="entryDate"
-                    value={formData.entryDate}
-                    onChange={handleChange}
+                    fullWidth size="small" required
+                    label="Date" type="date" name="entryDate"
+                    value={formData.entryDate} onChange={handleField}
                     InputLabelProps={{ shrink: true }}
-                    required
-                    size="small"
+                    error={validation.dateCheck.blocked}
+                    helperText={validation.dateCheck.message || ' '}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start"><DateIcon color="primary" fontSize="small" /></InputAdornment>
+                      )
+                    }}
                   />
                 </Grid>
-                
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    select 
-                    fullWidth 
-                    label="Vehicle" 
-                    name="vehicle" 
-                    value={formData.vehicle} 
-                    onChange={handleChange} 
-                    required
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <VehicleIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  >
-                    <MenuItem value=""><em>Select Vehicle</em></MenuItem>
-                    {vehicles.map((vehicle) => (
-                      <MenuItem key={vehicle.id} value={vehicle.id}>
-                        {vehicle.vehicleNo}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
 
                 <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    select 
-                    fullWidth 
-                    label="Driver" 
-                    name="driver" 
-                    value={formData.driver} 
-                    onChange={handleChange} 
-                    required
-                    size="small"
+                  <TextField
+                    select fullWidth size="small" required
+                    label="Supplier" name="supplier"
+                    value={formData.supplier} onChange={handleField}
+                    helperText=" "
                     InputProps={{
                       startAdornment: (
-                        <InputAdornment position="start">
-                          <DriverIcon color="primary" />
-                        </InputAdornment>
+                        <InputAdornment position="start"><SupplierIcon color="primary" fontSize="small" /></InputAdornment>
                       )
                     }}
                   >
-                    <MenuItem value=""><em>Select Driver</em></MenuItem>
-                    {drivers.map((driver) => (
-                      <MenuItem key={driver.id} value={driver.id}>
-                        {driver.name}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    select 
-                    fullWidth 
-                    label="Supplier" 
-                    name="supplier" 
-                    value={formData.supplier} 
-                    onChange={handleChange} 
-                    required
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SupplierIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  >
-                    <MenuItem value=""><em>Select Supplier</em></MenuItem>
                     {suppliers.map((supplier) => (
                       <MenuItem key={supplier.id} value={supplier.id}>
-                        {supplier.name}
+                        {supplier.name}{supplier.branch ? ` — ${supplier.branch}` : ''}
                       </MenuItem>
                     ))}
                   </TextField>
                 </Grid>
 
                 <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    fullWidth 
-                    label="Branch" 
-                    name="branch" 
-                    value={formData.branch} 
-                    onChange={handleChange}
-                    size="small"
+                  <TextField
+                    select fullWidth size="small" required
+                    label="Vehicle" name="vehicle"
+                    value={formData.vehicle} onChange={handleField}
+                    helperText=" "
                     InputProps={{
                       startAdornment: (
-                        <InputAdornment position="start">
-                          <BranchIcon color="primary" />
-                        </InputAdornment>
+                        <InputAdornment position="start"><VehicleIcon color="primary" fontSize="small" /></InputAdornment>
                       )
                     }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    fullWidth 
-                    label="Farm" 
-                    name="farm" 
-                    value={formData.farm} 
-                    onChange={handleChange}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <FarmIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    fullWidth 
-                    label="Supervisor Name" 
-                    name="supervisorName" 
-                    value={formData.supervisorName} 
-                    onChange={handleChange}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SupervisorIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
+                  >
+                    {vehicles.map((vehicle) => (
+                      <MenuItem key={vehicle.id} value={vehicle.id}>{vehicle.vehicleNo}</MenuItem>
+                    ))}
+                  </TextField>
                 </Grid>
 
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
-                    fullWidth
-                    label="Supervisor Phone"
-                    type="tel"
-                    name="supervisorPhoneNo"
-                    value={formData.supervisorPhoneNo}
-                    onChange={handleChange}
-                    inputProps={{ maxLength: 10, pattern: "[0-9]{10}" }}
-                    size="small"
+                    select fullWidth size="small" required
+                    label="Driver" name="driver"
+                    value={formData.driver} onChange={handleField}
+                    helperText=" "
                     InputProps={{
                       startAdornment: (
-                        <InputAdornment position="start">
-                          <PhoneIcon color="primary" />
-                        </InputAdornment>
+                        <InputAdornment position="start"><DriverIcon color="primary" fontSize="small" /></InputAdornment>
                       )
                     }}
-                  />
+                  >
+                    {drivers.map((driver) => (
+                      <MenuItem key={driver.id} value={driver.id}>{driver.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField fullWidth size="small" label="Farm" name="farm"
+                             value={formData.farm} onChange={handleField} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField fullWidth size="small" label="Branch" name="branch"
+                             value={formData.branch} onChange={handleField} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField fullWidth size="small" label="Supervisor" name="supervisorName"
+                             value={formData.supervisorName} onChange={handleField} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField fullWidth size="small" label="Supervisor phone" name="supervisorPhoneNo"
+                             value={formData.supervisorPhoneNo} onChange={handleField}
+                             inputProps={{ inputMode: 'numeric', maxLength: 10 }} />
                 </Grid>
               </Grid>
             </CardContent>
           </Card>
 
-          {/* Expenses Section */}
+          {/* ---- the DC lines ------------------------------------------- */}
           <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
-            <CardHeader 
-              title="Expenses" 
-              sx={{ 
-                bgcolor: 'primary.main',
-                color: 'white',
-                py: 1,
-                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
-              }}
-            />
-            <CardContent sx={{ py: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    fullWidth
-                    label="Driver Expense" 
-                    type="number" 
-                    name="driverExpense" 
-                    value={formData.driverExpense} 
-                    onChange={handleChange}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <ExpenseIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    fullWidth
-                    label="Diesel Amount" 
-                    type="number" 
-                    name="diesel" 
-                    value={formData.diesel} 
-                    onChange={handleChange}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <DieselIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <TextField 
-                    fullWidth
-                    label="Hamali Amount" 
-                    type="number" 
-                    name="hamali" 
-                    value={formData.hamali} 
-                    onChange={handleChange}
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <HamaliIcon color="primary" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-
-                {/* Total Expenses moved here - same height, no background */}
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ 
-                    height: '40px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    pl: 2
-                  }}>
-                    <Typography variant="body1" sx={{ 
-                      fontWeight: 700,
-                      fontSize: '1rem',
-                      color: 'text.primary'
-                    }}>
-                      Total: ₹{calculateTotalAmount().toFixed(2)}
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Container>
-      </Box>
-
-      {/* Scrollable DC Details Section */}
-      <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <Container maxWidth="xl" sx={{ height: '100%', pb: 1 }}>
-          <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
-            <CardHeader 
-              title="DC Details" 
+            <CardHeader
+              title="DC notes"
+              subheader="One line per delivery challan. The amount is calculated from weight × rate."
               action={
-                <IconButton onClick={addRow} color="inherit" size="small">
-                  <AddIcon />
-                </IconButton>
+                <Button size="small" startIcon={<AddIcon />} onClick={addLine} sx={{ color: 'white' }}>
+                  Add line
+                </Button>
               }
-              sx={{ 
-                bgcolor: 'primary.main',
-                color: 'white',
-                py: 1,
-                flexShrink: 0,
-                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+              sx={{
+                bgcolor: 'primary.main', color: 'white', py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' },
+                '& .MuiCardHeader-subheader': { color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem' }
               }}
             />
-            
-            {/* Scrollable Table */}
-            <TableContainer sx={{ flexGrow: 1, overflow: 'auto' }}>
-              <Table stickyHeader size="small">
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table size="small">
                 <TableHead>
                   <TableRow>
-                    {['Sr No', 'DC No', 'Quantity', 'Weight (kg)', 'Rate', 'Amount', 'DC File', 'Action'].map(header => (
-                      <TableCell 
-                        key={header} 
-                        sx={{ 
-                          fontWeight: 'bold', 
-                          bgcolor: '#f5f5f5',
-                          whiteSpace: 'nowrap',
-                          py: 1,
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        {header}
-                      </TableCell>
-                    ))}
+                    <TableCell sx={{ width: 40 }}>#</TableCell>
+                    <TableCell sx={{ minWidth: 120 }}>DC no</TableCell>
+                    <TableCell sx={{ minWidth: 100 }} align="right">Birds</TableCell>
+                    <TableCell sx={{ minWidth: 120 }} align="right">Weight (kg)</TableCell>
+                    <TableCell sx={{ minWidth: 110 }} align="right">Rate</TableCell>
+                    <TableCell sx={{ minWidth: 120 }} align="right">Amount</TableCell>
+                    <TableCell align="center" sx={{ minWidth: 120 }}>Scan</TableCell>
+                    <TableCell sx={{ width: 48 }} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {tableRows.map((row, index) => (
-                    <TableRow 
-                      key={index} 
-                      hover
-                      sx={{ '& td': { py: 0.5 } }}
-                    >
-                      <TableCell sx={{ fontSize: '0.85rem' }}>{row.srNo}</TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          fullWidth
-                          value={row.dcNo}
-                          onChange={(e) => handleTableChange(index, 'dcNo', e.target.value)}
-                          required
-                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          fullWidth
-                          type="number"
-                          value={row.nos}
-                          onChange={(e) => handleTableChange(index, 'nos', e.target.value)}
-                          required
-                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          fullWidth
-                          type="number"
-                          step="0.01"
-                          value={row.kilograms}
-                          onChange={(e) => handleTableChange(index, 'kilograms', e.target.value)}
-                          required
-                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          fullWidth
-                          type="number"
-                          step="0.01"
-                          value={row.rate}
-                          onChange={(e) => handleTableChange(index, 'rate', e.target.value)}
-                          required
-                          inputProps={{ style: { fontSize: '0.85rem', padding: '4px 8px' } }}
-                        />
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem' }}>
-                        ₹{row.amount}
-                      </TableCell>
-                      <TableCell>
-                        <IconButton component="label" color="primary" size="small">
-                          <AttachFileIcon />
-                          <input 
-                            type="file" 
-                            accept=".jpg,.jpeg,.png,.pdf,.txt" 
-                            onChange={handleFileChange}
-                            hidden
+                  {lines.map((line, index) => {
+                    const check = validation.lineChecks[index];
+                    const scan = filesByLine[index];
+                    return (
+                      <TableRow key={index} hover>
+                        <TableCell sx={{ color: 'text.secondary' }}>{line.srNo}</TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small" fullWidth value={line.dcNo}
+                            onChange={(event) => handleLineChange(index, 'dcNo', event.target.value)}
                           />
-                        </IconButton>
-                      </TableCell>
-                      <TableCell>
-                        {index === 0 ? (
-                          <IconButton onClick={addRow} color="success" size="small">
-                            <AddIcon />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small" fullWidth type="number" value={line.nos}
+                            onChange={(event) => handleLineChange(index, 'nos', event.target.value)}
+                            inputProps={{ min: 0, style: { textAlign: 'right' } }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small" fullWidth type="number" value={line.kilograms}
+                            onChange={(event) => handleLineChange(index, 'kilograms', event.target.value)}
+                            inputProps={{ min: 0, step: '0.001', style: { textAlign: 'right' } }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small" fullWidth type="number" value={line.rate}
+                            onChange={(event) => handleLineChange(index, 'rate', event.target.value)}
+                            inputProps={{ min: 0, step: '0.01', style: { textAlign: 'right' } }}
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                          {money(check?.expectedAmount ?? 0)}
+                          {/*
+                            The per-bird weight beside the amount, when it looks wrong. This is
+                            the check nothing did: 960 birds against 3,029 kg is fine, 10 birds
+                            against 900 kg is a digit in the wrong place.
+                          */}
+                          {check?.weightLooksWrong && (
+                            <Tooltip title={`${check.perBird} kg a bird — check the count and the weight`}>
+                              <WarnIcon color="warning" fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle' }} />
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell align="center">
+                          {scan ? (
+                            <Chip
+                              size="small"
+                              label={scan.name.length > 14 ? `${scan.name.slice(0, 12)}…` : scan.name}
+                              onDelete={() => detachScan(index)}
+                              variant="outlined"
+                            />
+                          ) : (
+                            <Tooltip title="Attach the scanned DC for this line">
+                              <IconButton component="label" color="primary" size="small">
+                                <AttachFileIcon fontSize="small" />
+                                <input
+                                  type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
+                                  onChange={(event) => attachScan(index, event.target.files[0])}
+                                />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            size="small" color="error"
+                            disabled={lines.length === 1}
+                            onClick={() => removeLine(index)}
+                          >
+                            <DeleteIcon fontSize="small" />
                           </IconButton>
-                        ) : (
-                          <IconButton onClick={() => deleteRow(index)} color="error" size="small">
-                            <DeleteIcon />
-                          </IconButton>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
+                {/*
+                  Totals under the lines rather than in a coloured band of their own: this is
+                  the figure that becomes the supplier's debt, and it is checked against the DC
+                  notes in hand before submitting.
+                */}
+                <TableFooter>
+                  <TableRow sx={{ '& td': { bgcolor: 'grey.100', fontWeight: 700, borderTop: '2px solid', borderColor: 'divider' } }}>
+                    <TableCell colSpan={2}>
+                      {validation.totals.lines} line{validation.totals.lines === 1 ? '' : 's'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {validation.totals.birds.toLocaleString('en-IN')}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {validation.totals.kilograms.toLocaleString('en-IN', { minimumFractionDigits: 3 })}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}>
+                      {validation.totals.averageRate === null ? '—' : `avg ${validation.totals.averageRate}`}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '1rem' }}>
+                      {money(validation.totals.amount)}
+                    </TableCell>
+                    <TableCell colSpan={2} align="right" sx={{ fontWeight: 400, color: 'text.secondary' }}>
+                      {validation.totals.averageWeight !== null
+                        && `${validation.totals.averageWeight} kg a bird`}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             </TableContainer>
-
-            {/* Fixed Totals Row */}
-            <Box sx={{ 
-              borderTop: '2px solid #e0e0e0', 
-              bgcolor: 'primary.main',
-              flexShrink: 0 
-            }}>
-              <Table size="small">
-                <TableBody>
-                  <TableRow>
-                    <TableCell colSpan={2} sx={{ 
-                      fontWeight: 'bold', 
-                      color: 'white', 
-                      py: 1,
-                      bgcolor: 'primary.main',
-                      border: 'none'
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CalculateIcon />
-                        TOTALS
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ 
-                      fontWeight: 'bold', 
-                      color: 'white',
-                      bgcolor: 'primary.main',
-                      border: 'none'
-                    }}>
-                      {calculateTotal('nos').toLocaleString()}
-                    </TableCell>
-                    <TableCell sx={{ 
-                      fontWeight: 'bold', 
-                      color: 'white',
-                      bgcolor: 'primary.main',
-                      border: 'none'
-                    }}>
-                      {calculateTotal('kilograms').toFixed(2)} kg
-                    </TableCell>
-                    <TableCell sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
-                    <TableCell sx={{ 
-                      fontWeight: 'bold', 
-                      color: 'white',
-                      bgcolor: 'primary.main',
-                      border: 'none'
-                    }}>
-                      ₹{calculateTotal('amount').toFixed(2)}
-                    </TableCell>
-                    <TableCell colSpan={2} sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Box>
           </Card>
+
+          {/* ---- trip expenses ----------------------------------------- */}
+          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
+            <CardHeader
+              title="Trip expenses"
+              subheader="Recorded against the trip. Not part of what the supplier is owed."
+              sx={{
+                bgcolor: 'grey.800', color: 'white', py: 1,
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' },
+                '& .MuiCardHeader-subheader': { color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem' }
+              }}
+            />
+            <CardContent sx={{ py: 2 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={4} md={3}>
+                  <TextField
+                    fullWidth size="small" type="number" label="Diesel" name="diesel"
+                    value={formData.diesel} onChange={handleField}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start"><DieselIcon fontSize="small" /></InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4} md={3}>
+                  <TextField fullWidth size="small" type="number" label="Hamali" name="hamali"
+                             value={formData.hamali} onChange={handleField} />
+                </Grid>
+                <Grid item xs={12} sm={4} md={3}>
+                  <TextField fullWidth size="small" type="number" label="Driver expense" name="driverExpense"
+                             value={formData.driverExpense} onChange={handleField} />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Paper variant="outlined" sx={{ px: 2, py: 1 }}>
+                    <Typography variant="caption" color="text.secondary">Trip cost</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {money(expenses)}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {/* What stops the submission, and what merely looks odd. */}
+          {validation.blocking.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <AlertTitle>Not ready to save</AlertTitle>
+              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                {validation.blocking.map((problem) => <li key={problem}>{problem}</li>)}
+              </Box>
+            </Alert>
+          )}
+          {validation.warnings.length > 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                {validation.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </Box>
+            </Alert>
+          )}
         </Container>
       </Box>
 
-      {/* Fixed Action Buttons */}
-      <Box sx={{ flexShrink: 0, borderTop: '1px solid #e0e0e0', bgcolor: 'white' }}>
+      <Box sx={{ flexShrink: 0, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Container maxWidth="xl">
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            gap: 2, 
-            justifyContent: 'center',
-            py: 2
-          }}>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              type="submit"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-              size="large"
-              sx={{ minWidth: 150 }}
+          <Stack direction="row" spacing={2} justifyContent="center" sx={{ py: 2 }} flexWrap="wrap" useFlexGap>
+            <Button
+              variant="contained" size="large" startIcon={<SaveIcon />}
+              disabled={submitting || !validation.canSubmit}
+              onClick={() => setReviewOpen(true)}
+              sx={{ minWidth: 170 }}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit'}
+              Review &amp; Submit
             </Button>
-            
-            <Button 
-              variant="outlined" 
-              color="secondary" 
-              onClick={handleClear}
-              disabled={isSubmitting}
-              startIcon={<ClearIcon />}
-              size="large"
-              sx={{ minWidth: 120 }}
+            <Button
+              variant="outlined" color="secondary" size="large" startIcon={<ClearIcon />}
+              onClick={handleClear} disabled={submitting} sx={{ minWidth: 120 }}
             >
               Clear
             </Button>
-            
-            <Button 
-              variant="contained" 
-              color="primary" 
-              onClick={handleOpenPaymentDialog}
-              startIcon={<PaymentIcon />}
-              size="large"
-              sx={{ minWidth: 150 }}
+            <Button
+              variant="outlined" size="large" startIcon={<PaymentIcon />}
+              onClick={() => setPaymentOpen(true)} sx={{ minWidth: 160 }}
             >
-              Payment Details
+              Pay a supplier
             </Button>
-          </Box>
+          </Stack>
         </Container>
       </Box>
 
-      {/* Snackbar */}
+      <ReviewDialog
+        open={reviewOpen}
+        summary={summary}
+        dateCheck={validation.dateCheck}
+        warnings={validation.warnings}
+        submitting={submitting}
+        onConfirm={handleSubmit}
+        onCancel={() => setReviewOpen(false)}
+      />
+
+      <SupplierPaymentDialog
+        open={paymentOpen}
+        suppliers={suppliers}
+        onClose={() => setPaymentOpen(false)}
+        onPaid={(message) => { say(message); setPaymentOpen(false); }}
+        onError={(message) => say(message, 'error')}
+      />
+
       <Snackbar
-        open={snackbarOpen}
+        open={snackbar.open}
         autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert 
-          onClose={handleCloseSnackbar} 
-          severity={snackbarSeverity} 
-          sx={{ width: '100%' }}
-          elevation={6}
+        <Alert
+          severity={snackbar.severity} elevation={6} sx={{ width: '100%' }}
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
         >
-          {snackbarMessage}
+          {snackbar.message}
         </Alert>
       </Snackbar>
-
-      {/* Payment Dialog */}
-      <Dialog 
-        open={paymentDialogOpen} 
-        onClose={handleClosePaymentDialog} 
-        maxWidth="md" 
-        fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}
-      >
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 600 }}>
-          Payment Details
-        </DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          <DialogContentText sx={{ mb: 3 }}>
-            Please fill in the payment details for the purchase transaction.
-          </DialogContentText>
-          <form onSubmit={handlePaymentSubmit}>
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Supplier"
-                  select
-                  fullWidth
-                  name="supplier"
-                  value={paymentData.supplier}
-                  onChange={handlePaymentChange}
-                  required
-                >
-                  <MenuItem value=""><em>Select Supplier</em></MenuItem>
-                  {suppliers.map((supplier) => (
-                    <MenuItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Date of Purchase"
-                  type="date"
-                  name="dateOfPurchase"
-                  value={paymentData.dateOfPurchase}
-                  onChange={handlePaymentChange}
-                  required
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Date of Transaction"
-                  type="date"
-                  name="dateOfTransaction"
-                  value={paymentData.dateOfTransaction}
-                  onChange={handlePaymentChange}
-                  required
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Transaction ID"
-                  name="trans_id"
-                  value={paymentData.trans_id}
-                  onChange={handlePaymentChange}
-                  required
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Total Amount"
-                  type="number"
-                  name="totalAmount"
-                  value={paymentData.totalAmount}
-                  onChange={handlePaymentChange}
-                  required
-                  fullWidth
-                  InputProps={{ startAdornment: '₹' }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Paid Amount"
-                  type="number"
-                  name="paidAmount"
-                  value={paymentData.paidAmount}
-                  onChange={handlePaymentChange}
-                  required
-                  fullWidth
-                  InputProps={{ startAdornment: '₹' }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Pending Payment"
-                  type="number"
-                  name="pendingPayment"
-                  value={paymentData.pendingPayment}
-                  onChange={handlePaymentChange}
-                  required
-                  fullWidth
-                  InputProps={{ readOnly: true, startAdornment: '₹' }}
-                  sx={{ bgcolor: '#f9f9f9' }}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Comment"
-                  name="comment"
-                  value={paymentData.comment}
-                  onChange={handlePaymentChange}
-                  fullWidth
-                  multiline
-                  rows={2}
-                  placeholder="Enter any payment related notes..."
-                />
-              </Grid>
-            </Grid>
-          </form>
-        </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button 
-            variant="contained" 
-            color="primary" 
-            onClick={handlePaymentSubmit}
-            startIcon={<SaveIcon />}
-          >
-            Submit Payment
-          </Button>
-          <Button 
-            variant="outlined" 
-            color="warning" 
-            onClick={clearPaymentData}
-            startIcon={<ClearIcon />}
-          >
-            Clear
-          </Button>
-          <Button 
-            variant="outlined" 
-            color="error" 
-            onClick={handleClosePaymentDialog}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
 
+/** The server's own words, which are specific and worth reading. */
+const serverMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data;
+  return data?.message || error?.message || fallback;
+};
+
+/**
+ * Reads back what is about to be saved, in names rather than ids.
+ *
+ * The sales screens have had this since the bulk entry was rebuilt, and a purchase deserves it
+ * more: it creates a debt, and the figures come off paper DC notes that are easy to mistype.
+ */
+const ReviewDialog = ({ open, summary, dateCheck, warnings, submitting, onConfirm, onCancel }) => (
+  <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
+    <DialogTitle sx={{ fontWeight: 600 }}>Confirm this purchase</DialogTitle>
+    <DialogContent dividers>
+      {dateCheck?.requiresConfirmation && (
+        <Alert severity="warning" sx={{ mb: 2 }}>{dateCheck.message}</Alert>
+      )}
+      {warnings?.map((warning) => (
+        <Alert severity="info" sx={{ mb: 2 }} key={warning}>{warning}</Alert>
+      ))}
+
+      <Stack spacing={1}>
+        <Line label="Date" value={summary.date} />
+        <Line label="Supplier" value={summary.supplier} />
+        <Line label="Vehicle" value={summary.vehicle} />
+        <Line label="Driver" value={summary.driver} />
+        {summary.farm && <Line label="Farm" value={summary.farm} />}
+        <Divider />
+        <Line label="DC lines" value={summary.lines} />
+        <Line label="Birds" value={summary.birds.toLocaleString('en-IN')} />
+        <Line label="Weight" value={`${summary.kilograms} kg`} />
+        <Line label="Average rate" value={summary.averageRate === null ? '—' : `₹${summary.averageRate}`} />
+        <Divider />
+        <Line label="Amount owed to the supplier" value={money(summary.amount)} strong />
+        <Line label="Trip expenses" value={money(summary.expenses)} />
+        <Line label="Scans attached" value={summary.scans} />
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onCancel} disabled={submitting}>Back</Button>
+      <Button
+        variant="contained" onClick={onConfirm} disabled={submitting}
+        startIcon={submitting ? <CircularProgress size={16} /> : <SaveIcon />}
+      >
+        {submitting ? 'Saving' : 'Save purchase'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+const Line = ({ label, value, strong = false }) => (
+  <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={2}>
+    <Typography variant="body2" color="text.secondary">{label}</Typography>
+    <Typography
+      variant={strong ? 'subtitle1' : 'body2'}
+      sx={{ fontWeight: strong ? 700 : 500, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}
+    >
+      {value || '—'}
+    </Typography>
+  </Stack>
+);
+
+/**
+ * Paying a supplier.
+ *
+ * Rebuilt around choosing the purchase, which is what the old form could not do. It asked for
+ * a supplier and a date and looked the purchase up from the pair - and when two purchases
+ * shared a date, as Komarla Agrovet's two do, the lookup expected one row, found two, and the
+ * payment failed every time under "Failed to process request".
+ *
+ * The unpaid purchases are listed with what remains on each, so the payment names one by id.
+ */
+const SupplierPaymentDialog = ({ open, suppliers, onClose, onPaid, onError }) => {
+  const [supplierId, setSupplierId] = useState('');
+  const [account, setAccount] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    purchaseId: '', dateOfTransaction: new Date().toISOString().slice(0, 10),
+    paidAmount: '', trans_id: '', comment: ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setSupplierId('');
+      setAccount(null);
+      setForm({
+        purchaseId: '', dateOfTransaction: new Date().toISOString().slice(0, 10),
+        paidAmount: '', trans_id: '', comment: ''
+      });
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!supplierId) { setAccount(null); return undefined; }
+    let cancelled = false;
+    setLoading(true);
+    // The account carries the per-purchase detail this form needs: which purchases are unpaid
+    // and how much is left on each.
+    fetchSupplierAccount(supplierId)
+      .then((data) => { if (!cancelled) setAccount(data); })
+      .catch((error) => {
+        if (!cancelled) onError(serverMessage(error, 'That supplier’s purchases could not be loaded.'));
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [supplierId, onError]);
+
+  const unpaid = useMemo(
+    () => (account?.purchases ?? []).filter((purchase) => Number(purchase.outstanding) > 0),
+    [account]
+  );
+
+  const chosen = unpaid.find((purchase) => String(purchase.id) === String(form.purchaseId));
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const result = await submitPayment({
+        supplier: Number(supplierId),
+        purchaseId: Number(form.purchaseId),
+        dateOfTransaction: form.dateOfTransaction,
+        paidAmount: Number(form.paidAmount),
+        trans_id: form.trans_id,
+        comment: form.comment
+      });
+      onPaid(`Paid ${money(result?.paidAmount ?? form.paidAmount)}. `
+        + `${money(result?.stillOutstanding ?? 0)} still outstanding on that purchase.`);
+    } catch (error) {
+      onError(serverMessage(error, 'The payment could not be recorded.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canPay = supplierId && form.purchaseId && Number(form.paidAmount) > 0 && !saving;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 600 }}>Pay a supplier</DialogTitle>
+      <DialogContent dividers>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <TextField
+              select fullWidth size="small" label="Supplier"
+              value={supplierId} onChange={(event) => {
+                setSupplierId(event.target.value);
+                setForm((prev) => ({ ...prev, purchaseId: '', paidAmount: '' }));
+              }}
+            >
+              {suppliers.map((supplier) => (
+                <MenuItem key={supplier.id} value={supplier.id}>{supplier.name}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          {loading && <Grid item xs={12}><CircularProgress size={20} /></Grid>}
+
+          {account && (
+            <Grid item xs={12}>
+              <Alert severity={Number(account.totals.outstanding) > 0 ? 'warning' : 'success'}>
+                {Number(account.totals.outstanding) > 0
+                  ? `${money(account.totals.outstanding)} outstanding across ${unpaid.length} purchase${unpaid.length === 1 ? '' : 's'}.`
+                  : 'Nothing is outstanding for this supplier.'}
+              </Alert>
+            </Grid>
+          )}
+
+          {unpaid.length > 0 && (
+            <Grid item xs={12}>
+              <TextField
+                select fullWidth size="small" label="Which purchase"
+                value={form.purchaseId}
+                onChange={(event) => {
+                  const purchase = unpaid.find((row) => String(row.id) === event.target.value);
+                  setForm((prev) => ({
+                    ...prev,
+                    purchaseId: event.target.value,
+                    // Defaulted to settling it in full, which is the common case.
+                    paidAmount: purchase ? String(Math.round(Number(purchase.outstanding))) : ''
+                  }));
+                }}
+                helperText="Chosen by purchase, not by date — two purchases can share a date"
+              >
+                {unpaid.map((purchase) => (
+                  <MenuItem key={purchase.id} value={String(purchase.id)}>
+                    {purchase.date} · {purchase.farm || 'no farm'} · {money(purchase.outstanding)} left
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          )}
+
+          {chosen && (
+            <>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth size="small" type="date" label="Paid on"
+                  value={form.dateOfTransaction}
+                  onChange={(event) => setForm((prev) => ({ ...prev, dateOfTransaction: event.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth size="small" type="number" label="Amount"
+                  value={form.paidAmount}
+                  onChange={(event) => setForm((prev) => ({ ...prev, paidAmount: event.target.value }))}
+                  helperText={Number(form.paidAmount) > Number(chosen.outstanding)
+                    ? `More than the ${money(chosen.outstanding)} outstanding`
+                    : `${money(chosen.outstanding)} outstanding`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth size="small" label="Reference" value={form.trans_id}
+                  onChange={(event) => setForm((prev) => ({ ...prev, trans_id: event.target.value }))}
+                  helperText="Cheque number or UPI reference"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth size="small" label="Note" value={form.comment}
+                  onChange={(event) => setForm((prev) => ({ ...prev, comment: event.target.value }))}
+                />
+              </Grid>
+            </>
+          )}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button
+          variant="contained" onClick={submit} disabled={!canPay}
+          startIcon={saving ? <CircularProgress size={16} /> : <PaymentIcon />}
+        >
+          Record payment
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export { SupplierPaymentDialog, ReviewDialog };
 export default PurchaseEntryPage;

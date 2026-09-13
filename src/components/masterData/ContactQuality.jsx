@@ -81,22 +81,32 @@ const STATUS_LABEL = {
   SHARED: 'Shared'
 };
 
-/** One editable row. Saves on its own, so a long list can be worked through. */
-const NumberEditor = ({ row, onSaved, onError }) => {
-  const [value, setValue] = useState('');
+/**
+ * One number field, saving on its own so a long list can be worked through.
+ *
+ * @param {boolean} [props.alternate] write the shop's second number instead of the main
+ *   one. A shop is reached on whichever phone is answered, and with one field the person
+ *   doing this work had to pick one and lose the other - which is what the shared
+ *   numbers in this data are: one number recorded against everybody who uses it.
+ */
+const NumberEditor = ({ row, onSaved, onError, alternate = false, initial = '' }) => {
+  const [value, setValue] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const feedback = validateWhileTyping(value);
-  const canSave = isValidMobile(value) && !saving;
+  // Clearing is allowed for the second number only - blanking the main one would make
+  // a reachable customer unreachable, which is the opposite of this screen's job.
+  const clearing = alternate && value.trim() === '' && initial !== '';
+  const canSave = (isValidMobile(value) || clearing) && !saving;
 
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
     try {
-      await updateCustomerMobile(row.customerId, value);
+      await updateCustomerMobile(row.customerId, value, alternate);
       setSaved(true);
-      onSaved(row.customerId, value);
+      onSaved(row.customerId, value, alternate);
     } catch (error) {
       // The server owns the rules that need a database to check - chiefly whether
       // the number already belongs to somebody else - so its message is shown.
@@ -107,7 +117,9 @@ const NumberEditor = ({ row, onSaved, onError }) => {
   };
 
   if (saved) {
-    return (
+    return value.trim() === '' ? (
+      <Chip size="small" label="Removed" />
+    ) : (
       <Chip
         size="small"
         color="success"
@@ -121,12 +133,12 @@ const NumberEditor = ({ row, onSaved, onError }) => {
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
       <TextField
         size="small"
-        placeholder="10-digit mobile"
+        placeholder={alternate ? 'Second number (optional)' : '10-digit mobile'}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => { if (event.key === 'Enter') save(); }}
-        error={feedback.tone === 'error'}
-        helperText={feedback.message || ' '}
+        error={feedback.tone === 'error' && !clearing}
+        helperText={clearing ? 'Press save to remove' : (feedback.message || ' ')}
         inputProps={{ inputMode: 'numeric', maxLength: 15, style: { fontVariantNumeric: 'tabular-nums' } }}
         sx={{ width: 168, '& .MuiFormHelperText-root': { mx: 0.5, fontSize: 11 } }}
         InputProps={{
@@ -135,7 +147,9 @@ const NumberEditor = ({ row, onSaved, onError }) => {
           ) : null
         }}
       />
-      <Tooltip title={canSave ? 'Save this number' : 'Enter a valid 10-digit number'}>
+      <Tooltip title={canSave
+        ? (clearing ? 'Remove this number' : 'Save this number')
+        : 'Enter a valid 10-digit number'}>
         <span>
           <IconButton size="small" color="primary" onClick={save} disabled={!canSave} sx={{ mt: 0.25 }}>
             {saving ? <CircularProgress size={16} /> : <SaveIcon fontSize="small" />}
@@ -157,6 +171,8 @@ const ContactQuality = ({ embedded = false }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fixed, setFixed] = useState({});
+  /** Second numbers saved in this session, tracked apart from corrected main ones. */
+  const [alternateSaved, setAlternateSaved] = useState({});
   const [filter, setFilter] = useState('owing');
 
   const load = useCallback(async () => {
@@ -174,8 +190,20 @@ const ContactQuality = ({ embedded = false }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSaved = (customerId, mobileNo) => {
-    setFixed((current) => ({ ...current, [customerId]: mobileNo }));
+  /**
+   * Records a saved number so the row greys out and the progress bar moves.
+   *
+   * A second number counts as fixing the customer - they become reachable, which is
+   * what this list measures - but it must not replace the main field's editor, because
+   * the main number is still wrong and somebody should still correct it. So the
+   * alternate is tracked separately and the primary editor stays open.
+   */
+  const handleSaved = (customerId, mobileNo, alternate = false) => {
+    if (alternate) {
+      setAlternateSaved((current) => ({ ...current, [customerId]: mobileNo }));
+    } else {
+      setFixed((current) => ({ ...current, [customerId]: mobileNo }));
+    }
     setError('');
   };
 
@@ -186,7 +214,12 @@ const ContactQuality = ({ embedded = false }) => {
     return rows;
   }, [data, filter]);
 
-  const fixedCount = Object.keys(fixed).length;
+  // Either kind of save makes a customer reachable, which is what this list counts -
+  // but a customer fixed both ways is still one customer off the list.
+  const fixedCount = new Set([
+    ...Object.keys(fixed),
+    ...Object.keys(alternateSaved)
+  ]).size;
   const progress = data?.unusable ? (fixedCount / data.unusable) * 100 : 0;
 
   // Embedded inside Master Data there is already a page container and heading, so
@@ -424,6 +457,12 @@ const ContactQuality = ({ embedded = false }) => {
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Sales</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Last sale</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Correct number</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>
+                          Second number
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
+                            optional
+                          </Typography>
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -469,6 +508,15 @@ const ContactQuality = ({ embedded = false }) => {
                               ) : (
                                 <NumberEditor row={row} onSaved={handleSaved} onError={setError} />
                               )}
+                            </TableCell>
+                            <TableCell sx={{ width: 220 }}>
+                              <NumberEditor
+                                row={row}
+                                alternate
+                                initial={row.alternateMobileNo || ''}
+                                onSaved={handleSaved}
+                                onError={setError}
+                              />
                             </TableCell>
                           </TableRow>
                         );

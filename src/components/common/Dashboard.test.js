@@ -44,49 +44,67 @@ describe('Dashboard', () => {
     expect(screen.getByText('09 Sep 2026 · generated', { exact: false })).toBeInTheDocument();
   });
 
-  it('shows the day\'s bird movement and whether it tallies', async () => {
+  it('shows the day\'s activity counts, bird movement and weight tally together', async () => {
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText(/Bird movement/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Today's activity/)).toBeInTheDocument());
 
-    // The strip is its own panel; "Mortality" is also a column header and a row
-    // label elsewhere, so the assertions are scoped to it.
-    const strip = screen.getByText(/Bird movement/).closest('.MuiPaper-root');
+    // The three are one panel now, not a separate strip plus a 14-day table - so the
+    // assertions are scoped to that one Card rather than hunting across the page.
+    const panel = screen.getByText(/Today's activity/).closest('.MuiPaper-root');
+
+    // Activity counts: 3 trips, 33 sale transactions, 33 customers - previously only
+    // visible as subtext on the "Birds sold" tile, or buried in the big comparison table.
+    expect(within(panel).getByText('Trips')).toBeInTheDocument();
+    expect(within(panel).getByText('3')).toBeInTheDocument();
+    expect(within(panel).getByText('Sale transactions')).toBeInTheDocument();
+    expect(within(panel).getAllByText('33').length).toBeGreaterThanOrEqual(2);
 
     // 710 loaded = 636 sold + 8 mortality + 62 to farm leaves 4 unaccounted for.
-    expect(within(strip).getByText('710')).toBeInTheDocument();
-    expect(within(strip).getByText('636')).toBeInTheDocument();
-    expect(within(strip).getByText('Mortality')).toBeInTheDocument();
-    expect(within(strip).getByText('8')).toBeInTheDocument();
-    expect(within(strip).getByText('Returned to farm')).toBeInTheDocument();
-    expect(within(strip).getByText('62')).toBeInTheDocument();
-    expect(within(strip).getByText(/4 birds unaccounted for/)).toBeInTheDocument();
+    expect(within(panel).getByText('710')).toBeInTheDocument();
+    expect(within(panel).getByText('636')).toBeInTheDocument();
+    expect(within(panel).getByText('Mortality')).toBeInTheDocument();
+    expect(within(panel).getByText('8')).toBeInTheDocument();
+    expect(within(panel).getByText('Returned to farm')).toBeInTheDocument();
+    expect(within(panel).getByText('62')).toBeInTheDocument();
+    expect(within(panel).getByText(/4 birds unaccounted for/)).toBeInTheDocument();
+
+    // The fixture's loaded weight was never recorded (0), so the weight tally must say
+    // so honestly rather than reporting a gap it cannot support.
+    expect(within(panel).getByText(/Loaded weight was not recorded/)).toBeInTheDocument();
   });
 
-  it('lists every day with mortality, returns and a tally that adds up', async () => {
+  it('checks the weight tally once loaded weight is actually recorded', async () => {
+    fetchDashboardOverview.mockResolvedValue({
+      ...overview,
+      day: { ...overview.day, weightLoaded: 1700, weightGap: 87.2 }
+    });
+
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText('Day by day, last 14 days')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Today's activity/)).toBeInTheDocument());
 
-    // 28 Aug tallies exactly: 1633 loaded, 1391 sold, 9 mortality, 233 to farm.
-    const tallying = rowFor('28 Aug');
-    expect(within(tallying).getByText('1,633')).toBeInTheDocument();
-    expect(within(tallying).getByText('1,391')).toBeInTheDocument();
-    expect(within(tallying).getByText('tallies')).toBeInTheDocument();
-
-    // 08 Sep does not: 2190 - 1661 - 15 - 282 leaves 232.
-    const mismatch = rowFor('08 Sep');
-    expect(within(mismatch).getByText('+232')).toBeInTheDocument();
-
-    // 11 of the 14 days do not tally, and the panel says so up front.
-    expect(screen.getByText(/11 of 14 days do not tally/)).toBeInTheDocument();
+    const panel = screen.getByText(/Today's activity/).closest('.MuiPaper-root');
+    expect(within(panel).getByText('1,700')).toBeInTheDocument();
+    expect(within(panel).getByText('Gap (shrinkage)')).toBeInTheDocument();
+    expect(within(panel).getByText('87.2')).toBeInTheDocument();
   });
 
   it('does not draw a chart', async () => {
     const { container } = render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText('Day by day, last 14 days')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Today's activity/)).toBeInTheDocument());
 
     // Only MUI icons remain; no plotted geometry.
     expect(container.querySelectorAll('svg rect').length).toBe(0);
     expect(container.querySelectorAll('svg line').length).toBe(0);
+  });
+
+  it('no longer carries the 14-day table this replaced', async () => {
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText(/Today's activity/)).toBeInTheDocument());
+
+    // The redesign's whole point: one readable panel for the day instead of an
+    // eleven-column table stretching back a fortnight.
+    expect(screen.queryByText(/Day by day, last 14 days/)).not.toBeInTheDocument();
+    expect(screen.queryByText('14-day total')).not.toBeInTheDocument();
   });
 
   it('shows every route trading in the month with its share', async () => {

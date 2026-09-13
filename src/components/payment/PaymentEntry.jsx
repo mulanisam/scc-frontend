@@ -12,7 +12,8 @@ import {
   CardContent,
   CardHeader,
   Divider,
-  InputAdornment
+  InputAdornment,
+  Typography
 } from '@mui/material';
 import { 
   Payment as PaymentIcon,
@@ -22,6 +23,7 @@ import {
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/axiosConfig';
 import PaymentService from '../service/PaymentService';
+import MessageChannelToggles from '../common/MessageChannelToggles';
 import {  getDrivers } from '../service/SalesService';
 
 const PaymentEntry = () => {
@@ -39,7 +41,10 @@ const PaymentEntry = () => {
     paymentMode: 'CASH',
     transactionReference: '',
     remarks: '',
-    receivedBy: localStorage.getItem('username') || 'Admin'
+    receivedBy: localStorage.getItem('username') || 'Admin',
+    // A receipt was the one money movement the customer was never told about.
+    sendSms: true,
+    sendWhatsapp: false
   });
 
   useEffect(() => {
@@ -100,7 +105,9 @@ const loadMasterData = async () => {
         paymentMode: formData.paymentMode,
         transactionReference: formData.transactionReference,
         remarks: formData.remarks,
-        receivedBy: formData.receivedBy
+        receivedBy: formData.receivedBy,
+        sendSms: formData.sendSms,
+        sendWhatsapp: formData.sendWhatsapp
       };
 
       await PaymentService.createPayment(paymentData, token);
@@ -114,7 +121,11 @@ const loadMasterData = async () => {
         paymentMode: 'CASH',
         transactionReference: '',
         remarks: '',
-        receivedBy: localStorage.getItem('username') || 'Admin'
+        receivedBy: localStorage.getItem('username') || 'Admin',
+        // The toggles keep their positions: the next receipt is usually sent the
+        // same way as the last.
+        sendSms: formData.sendSms,
+        sendWhatsapp: formData.sendWhatsapp
       });
       setSelectedCustomer(null);
     } catch (err) {
@@ -267,6 +278,32 @@ const loadMasterData = async () => {
                 rows={2}
                 placeholder="Additional notes..."
               />
+            </Grid>
+
+            {/*
+              Acknowledge the receipt to the customer.
+
+              A payment taken on its own used to send nothing at all - the daily message
+              goes out on a sale and states the balance, so somebody who settled in cash
+              had no record of it until the next statement. The two channels say different
+              things because their approved templates do: WhatsApp states the amount
+              received, SMS states the balance afterwards.
+            */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                <MessageChannelToggles
+                  kind="payment"
+                  sendSms={formData.sendSms}
+                  sendWhatsapp={formData.sendWhatsapp}
+                  onChange={(field, value) => setFormData((current) => ({ ...current, [field]: value }))}
+                  disabled={!selectedCustomer}
+                />
+                {selectedCustomer && !selectedCustomer.mobileNo && !selectedCustomer.alternateMobileNo && (
+                  <Typography variant="caption" color="warning.dark">
+                    {selectedCustomer.name} has no mobile number recorded, so nothing can be sent.
+                  </Typography>
+                )}
+              </Box>
             </Grid>
 
             <Grid item xs={12}>

@@ -4,13 +4,27 @@ import { jwtDecode } from "jwt-decode";
 class UserService{
     
 
+    /**
+     * Signs in, and surfaces the server's own reason when it refuses.
+     *
+     * The rethrow used to be bare, so the login screen showed axios's message - "Request
+     * failed with status code 401" - instead of "Those credentials were not accepted."
+     * That was hidden until the server started answering failures with a real status: it
+     * used to return HTTP 200 with the failure buried in the body, so axios never threw and
+     * the screen read the message out of the response.
+     */
     static async login(username, password){
         try{
             const response = await axios.post(`${API_BASE_URL}/auth/login`, {username, password})
             return response.data;
 
         }catch(err){
-            throw err;
+            throw new Error(
+                err.response?.data?.message
+                || err.response?.data?.error
+                || (err.response ? 'Sign-in failed. Please try again.'
+                                 : 'Cannot reach the server. Check your connection.')
+            );
         }
     }
 

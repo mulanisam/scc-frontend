@@ -24,6 +24,8 @@ import {
    LocalShipping as VehicleIcon,
    Person as PartyIcon,
   Business as SupplierIcon,
+  AccountBalance as LedgerIcon,
+  Assessment as ReportsIcon,
 } from '@mui/icons-material';
 import { 
   getParties, 
@@ -33,7 +35,23 @@ import {
   getVehiclesByParty 
 } from '../service/TradingService';
 import { calculateAmount } from '../../utils/businessRules';
+import MessageChannelToggles from '../common/MessageChannelToggles';
+import TradingLedger from './TradingLedger';
+import TradingReports from './TradingReports';
 
+
+/**
+ * What the server said went wrong, or a fallback.
+ *
+ * The handler returns { message } for a business refusal and the message is the useful
+ * part - "MH12AB1234 is not one of Ajit Poultry's vehicles" tells the operator what to do,
+ * where "Error creating sales entry" tells them to call somebody.
+ */
+const serverMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data;
+  return data?.message || error?.message || fallback;
+};
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -73,14 +91,17 @@ function TradingPage() {
   const [salesData, setSalesData] = useState({
     date: new Date().toISOString().slice(0, 10),
     partyId: '',
-    partyVehicleId: '',
+    vehicleNumber: '',
     supplierId: '',    // new
     birds: '',
     kilograms: '',
     rate: '',
     amount: '',
     payment: '',       // new
-    description: ''
+    description: '',
+    // Per-entry, like the sales screen. Both can be on.
+    sendSms: true,
+    sendWhatsapp: false
   });
 
   // Payment Entry State - Updated field names
@@ -88,8 +109,13 @@ function TradingPage() {
     date: new Date().toISOString().slice(0, 10),
     partyId: '',
     payment: '',
-    paymentMode: 'cash',
+    paymentMode: 'CASH',
     transactionId: '',
+    // Per-entry, like every other entry screen. Both can be on, and they say different
+    // things: the SMS states the balance after the receipt, the WhatsApp message states
+    // the amount received.
+    sendSms: true,
+    sendWhatsapp: false,
     description: ''
   });
 
@@ -127,10 +153,10 @@ function TradingPage() {
     
     if (field === 'partyId' && value) {
       try {
-        const vehiclesRes = await getVehiclesByParty(value);
-        setVehicles(vehiclesRes.data || []);
+        // A plain array of registration numbers now, read off the party.
+        setVehicles(await getVehiclesByParty(value));
         // Reset vehicle selection when party changes
-        setSalesData(prev => ({ ...prev, partyVehicleId: '' }));
+        setSalesData(prev => ({ ...prev, vehicleNumber: '' }));
       } catch (error) {
         showSnackbar('Error loading vehicles', 'error');
       }
@@ -147,8 +173,12 @@ function TradingPage() {
   };
 
   const handleSalesSubmit = async () => {
-    if (!salesData.partyId || !salesData.partyVehicleId || !salesData.birds || !salesData.kilograms || !salesData.rate || !salesData.supplierId ) {
-      showSnackbar('Please fill all required fields', 'error');
+    // Supplier is optional: a load sold to a party need not say where the birds came
+    // from, and the 571 converted entries have none recorded at all. Requiring it here
+    // while the server does not would have blocked entries the server would accept.
+    if (!salesData.partyId || !salesData.vehicleNumber || !salesData.birds
+        || !salesData.kilograms || !salesData.rate) {
+      showSnackbar('Party, vehicle, birds, weight and rate are all needed.', 'error');
       return;
     }
 
@@ -160,22 +190,28 @@ function TradingPage() {
         payment: salesData.payment ? parseInt(salesData.payment) : 0
       };
       await createSalesEntry(submitData);
-      showSnackbar('Sales entry created successfully');
+      showSnackbar('Load recorded and billed to the party\'s account');
       setSalesData({
         date: new Date().toISOString().slice(0, 10),
         partyId: '',
-        partyVehicleId: '',
+        vehicleNumber: '',
         supplierId: '',    // reset supplier
         birds: '',
         kilograms: '',
         rate: '',
         amount: '',
         payment: '',       // reset payment
-        description: ''
+        description: '',
+        // Kept: the next load usually goes out the same way as the last.
+        sendSms: salesData.sendSms,
+        sendWhatsapp: salesData.sendWhatsapp
       });
       setVehicles([]); // Clear vehicles
     } catch (error) {
-      showSnackbar('Error creating sales entry', 'error');
+      // The server's refusals are specific and worth reading: a vehicle that is not this
+      // party's, an amount that disagrees with weight x rate, a party with no ledger
+      // account. "Error creating sales entry" threw all of that away.
+      showSnackbar(serverMessage(error, 'The load could not be recorded.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -199,17 +235,29 @@ function TradingPage() {
         payment: parseInt(paymentData.payment) // Convert to integer
       };
       await createPaymentEntry(submitData);
-      showSnackbar('Payment entry created successfully');
-      setPaymentData({
+      showSnackbar('Payment recorded and credited to the party\'s account');
+      setPaymentData((prev) => ({
         date: new Date().toISOString().slice(0, 10),
         partyId: '',
         payment: '',
-        paymentMode: 'cash',
+        paymentMode: 'CASH',
         transactionId: '',
-        description: ''
-      });
+        description: '',
+        // The channel choice survives, so the second receipt of the morning is not
+        // silently sent on no channel at all.
+        sendSms: prev.sendSms,
+        sendWhatsapp: prev.sendWhatsapp
+      }));
     } catch (error) {
-      showSnackbar('Error creating payment entry', 'error');
+      /*
+       * The server's own words, not a generic line.
+       *
+       * This used to say "Error creating payment entry" for everything, which is how a
+       * payment tab posting to an endpoint that did not exist looked like a glitch for
+       * months instead of like nothing being saved. The refusals worth reading are real
+       * ones - a party with no ledger account, a future date, an amount of zero.
+       */
+      showSnackbar(serverMessage(error, 'The payment could not be recorded.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -265,9 +313,26 @@ function TradingPage() {
               icon={<SalesIcon />}
               iconPosition="start"
             />
-            <Tab 
-              label="Payment Entry" 
+            <Tab
+              label="Payment Entry"
               icon={<PaymentIcon />}
+              iconPosition="start"
+            />
+            {/*
+              The wholesale ledger and reports, kept separate from the retail ones.
+
+              Route 9 - eleven parties and 44 lakh - used to live inside the route reports
+              as a delivery round that does not exist. It is here now, and these two tabs
+              are where it is read.
+            */}
+            <Tab
+              label="Ledger"
+              icon={<LedgerIcon />}
+              iconPosition="start"
+            />
+            <Tab
+              label="Reports"
+              icon={<ReportsIcon />}
               iconPosition="start"
             />
           </Tabs>
@@ -330,8 +395,8 @@ function TradingPage() {
                     select
                     fullWidth
                     label="Vehicle"
-                    value={salesData.partyVehicleId}
-                    onChange={(e) => handleSalesChange('partyVehicleId', e.target.value)}
+                    value={salesData.vehicleNumber}
+                    onChange={(e) => handleSalesChange('vehicleNumber', e.target.value)}
                     disabled={!salesData.partyId}
                     size="small"
                     required
@@ -344,11 +409,19 @@ function TradingPage() {
                     }}
                   >
                     <MenuItem value=""><em>Select Vehicle</em></MenuItem>
-                    {vehicles.map(vehicle => (
-                      <MenuItem key={vehicle.id} value={vehicle.id}>
-                        {vehicle.vehicleNumber}
+                    {/* The number is the value: a trading entry records which vehicle
+                        came, not a row id, so it still reads correctly after that
+                        vehicle leaves the party's list. */}
+                    {vehicles.map(vehicleNumber => (
+                      <MenuItem key={vehicleNumber} value={vehicleNumber}>
+                        {vehicleNumber}
                       </MenuItem>
                     ))}
+                    {vehicles.length === 0 && salesData.partyId && (
+                      <MenuItem value="" disabled>
+                        <em>No vehicles recorded for this party</em>
+                      </MenuItem>
+                    )}
                   </TextField>
                 </Grid>
 {/* Supplier Dropdown */}
@@ -460,6 +533,27 @@ function TradingPage() {
                     size="small"
                   />
                 </Grid>
+
+                {/*
+                  The same two channels the sales screen offers.
+
+                  Route 9's eleven parties were messaged like any other customer before
+                  they moved here, and four of them have a usable number - so the toggles
+                  had to come with them, or the move would have quietly stopped their
+                  messages. They queue through the same outbox, so a party shows up in the
+                  messaging dashboard with the same delivery status and resend button.
+                */}
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <MessageChannelToggles
+                      kind="trading"
+                      sendSms={salesData.sendSms}
+                      sendWhatsapp={salesData.sendWhatsapp}
+                      onChange={handleSalesChange}
+                      disabled={!salesData.partyId}
+                    />
+                  </Box>
+                </Grid>
               </Grid>
 
               <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
@@ -476,16 +570,22 @@ function TradingPage() {
                 <Button
                   variant="outlined"
                   onClick={() => {
-                    setSalesData({
+                    setSalesData((prev) => ({
                       date: new Date().toISOString().slice(0, 10),
                       partyId: '',
-                      partyVehicleId: '',
+                      vehicleNumber: '',
+                      supplierId: '',
                       birds: '',
                       kilograms: '',
                       rate: '',
                       amount: '',
-                      description: ''
-                    });
+                      payment: '',
+                      description: '',
+                      // Kept, like the submit reset already does. Clearing the form dropped
+                      // these to undefined, which turned both toggles off without saying so.
+                      sendSms: prev.sendSms,
+                      sendWhatsapp: prev.sendWhatsapp
+                    }));
                     setVehicles([]);
                   }}
                 >
@@ -595,6 +695,26 @@ function TradingPage() {
                     size="small"
                   />
                 </Grid>
+
+                {/*
+                  Acknowledging the receipt, on the same two channels as everywhere else.
+
+                  A payment is the money movement most worth telling a party about: a load
+                  they can see arrive, but a cash settlement leaves them nothing until the
+                  next statement. Disabled until a party is chosen, because there is nobody
+                  to send to before that.
+                */}
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <MessageChannelToggles
+                      kind="payment"
+                      sendSms={paymentData.sendSms}
+                      sendWhatsapp={paymentData.sendWhatsapp}
+                      onChange={handlePaymentChange}
+                      disabled={!paymentData.partyId}
+                    />
+                  </Box>
+                </Grid>
               </Grid>
 
               <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
@@ -607,23 +727,43 @@ function TradingPage() {
                 >
                   {loading ? 'Processing...' : 'Create Payment Entry'}
                 </Button>
-                
+
                 <Button
                   variant="outlined"
-                  onClick={() => setPaymentData({
+                  onClick={() => setPaymentData((prev) => ({
                     date: new Date().toISOString().slice(0, 10),
                     partyId: '',
                     payment: '',
-                    paymentMode: 'cash',
+                    paymentMode: 'CASH',
                     transactionId: '',
-                    description: ''
-                  })}
+                    description: '',
+                    // Kept across a clear: the operator's channel choice is a standing
+                    // preference for the session, not part of this one receipt. Resetting
+                    // it silently turned messages off for every payment after the first.
+                    sendSms: prev.sendSms,
+                    sendWhatsapp: prev.sendWhatsapp
+                  }))}
                 >
                   Clear
                 </Button>
               </Box>
             </CardContent>
           </Card>
+        </TabPanel>
+
+        {/*
+          Ledger and reports for the wholesale side.
+
+          Mounted only when their tab is open - TabPanel returns null otherwise - so
+          neither fetches until it is looked at. The ledger's party list reads every
+          party's balance off the ledger, which is not free.
+        */}
+        <TabPanel value={tabValue} index={2}>
+          <TradingLedger />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={3}>
+          <TradingReports />
         </TabPanel>
       </Card>
 

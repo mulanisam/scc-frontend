@@ -7,8 +7,14 @@
  * date-filtered statement opened mid-stream on a balance nothing explained.
  *
  * buildStatementModel turns the server payload into the rows and figures both
- * renderings display; ledgerStatementPdf prints that same model. Nothing here
- * touches jsPDF or the DOM, so the model stays testable on its own.
+ * renderings display. Nothing here touches the DOM, so the model stays testable on
+ * its own.
+ *
+ * The PDF is no longer one of the two renderings: it is drawn by the server, from
+ * StatementModel.java and StatementFormat.java, which are ports of this file. The
+ * weekly WhatsApp statement is sent by a scheduled job with no browser to draw in, and
+ * two layouts would have drifted. StatementFormatParityTest asserts the Java produces
+ * the strings below character for character.
  */
 
 const num = (value) => {
@@ -64,7 +70,10 @@ const PARTICULARS = {
   SALE: { label: 'Sale', voucher: 'INV' },
   PAYMENT: { label: 'Payment received', voucher: 'RCPT' },
   CREDIT_NOTE: { label: 'Credit note', voucher: 'CN' },
-  DEBIT_NOTE: { label: 'Debit note', voucher: 'DN' }
+  DEBIT_NOTE: { label: 'Debit note', voucher: 'DN' },
+  // Was missing, so an adjustment fell through to the fallback below and printed
+  // "ADJUSTMENT" - the raw enum name this table exists to keep off the page.
+  ADJUSTMENT: { label: 'Adjustment', voucher: 'ADJ' }
 };
 
 const particularsFor = (entry) => {

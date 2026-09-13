@@ -15,13 +15,14 @@ import UpdateUser from './components/userspage/UpdateUser';
 import UserManagementPage from './components/userspage/UserManagementPage';
 import Reports from './components/common/Reports';
 import SalesEntry from './components/sale/SalesEntry';
-import PurchaseEntryPage from './components/purchase/PurchaseEntry';
+import PurchasePage from './components/purchase/PurchasePage';
 import MasterData from './components/masterData/MasterData';
 import ContactQuality from './components/masterData/ContactQuality';
 import Dashboard from './components/common/Dashboard';
 import TradingPage from './components/trading/TradingPage';
 import DriverSalesPage from './components/sale/DriverSalesPage';
 import CustomerLedgerView from './components/ledger/CustomerLedgerView';
+import MessagingDashboard from './components/messaging/MessagingDashboard';
 
 /** Where a signed-in user belongs when they hit a route they shouldn't. */
 const useHomePath = () => {
@@ -81,11 +82,18 @@ const AppRoutes = () => {
       {/* Office staff and admins */}
       <Route path="/dashboard" element={<RequireAuth allow={isOfficeUser}><Dashboard /></RequireAuth>} />
       <Route path="/sale" element={<RequireAuth allow={isOfficeUser}><SalesEntry /></RequireAuth>} />
-      <Route path="/purchase" element={<RequireAuth allow={isOfficeUser}><PurchaseEntryPage /></RequireAuth>} />
+      {/* Entry and payables, tabbed - the same shape as the sales and trading pages. */}
+      <Route path="/purchase" element={<RequireAuth allow={isOfficeUser}><PurchasePage /></RequireAuth>} />
       <Route path="/reports" element={<RequireAuth allow={isOfficeUser}><Reports /></RequireAuth>} />
       <Route path="/ledger" element={<RequireAuth allow={isOfficeUser}><CustomerLedgerView /></RequireAuth>} />
       <Route path="/master-data" element={<RequireAuth allow={isOfficeUser}><MasterData /></RequireAuth>} />
       <Route path="/contact-quality" element={<RequireAuth allow={isOfficeUser}><ContactQuality /></RequireAuth>} />
+      {/*
+        Office staff as well as admins. They enter the day's sales and are the ones
+        asked whether a customer's message arrived, so they need to be able to see the
+        log and resend a failure without waiting for an administrator.
+      */}
+      <Route path="/messaging" element={<RequireAuth allow={isOfficeUser}><MessagingDashboard /></RequireAuth>} />
 
       {/* Admin only */}
       <Route path="/trading" element={<RequireAuth allow={isAdminUser}><TradingPage /></RequireAuth>} />

@@ -1,0 +1,6 @@
+# .command files are shell scripts macOS runs directly by their shebang line.
+# A shebang with CRLF line endings ("#!/bin/bash\r") points at an interpreter
+# that does not exist, and the script fails to run with no useful error - so
+# these must never be normalised to Windows line endings, on any machine that
+# later edits and commits them.
+*.command text eol=lf
