@@ -25,6 +25,7 @@ import {
   Contacts as ContactsIcon,
   DoneAll as DeliveredIcon,
   ErrorOutline as FailedIcon,
+  HowToReg as ConsentIcon,
   PictureAsPdf as StatementIcon,
   Send as SendIcon,
   Sms as SmsIcon,
@@ -38,6 +39,7 @@ import MessageTable from './MessageTable';
 import CustomSendPanel from './CustomSendPanel';
 import StatementPanel from './StatementPanel';
 import TemplatePanel from './TemplatePanel';
+import WhatsappConsent from './WhatsappConsent';
 import {
   getStats, getMessages, resendMessage, syncDeliveryStatus, dispatchNow, getTemplates,
 } from '../service/MessagingService';
@@ -60,7 +62,7 @@ import { STATUS_FILTERS, statusLabel, compactMoney } from './messagingFormat';
  * with no number and 12 with something that is not one.
  */
 
-const TABS = ['WHATSAPP', 'SMS', 'STATEMENTS', 'SEND', 'TEMPLATES', 'CONTACTS'];
+const TABS = ['WHATSAPP', 'CONSENT', 'SMS', 'STATEMENTS', 'SEND', 'TEMPLATES', 'CONTACTS'];
 
 const MessagingDashboard = () => {
   const [tab, setTab] = useState(0);
@@ -257,6 +259,7 @@ const MessagingDashboard = () => {
           sx={{ borderBottom: 1, borderColor: 'divider', px: 1 }}
         >
           <Tab icon={<WhatsAppIcon fontSize="small" />} iconPosition="start" label="WhatsApp" />
+          <Tab icon={<ConsentIcon fontSize="small" />} iconPosition="start" label="Consent" />
           <Tab icon={<SmsIcon fontSize="small" />} iconPosition="start" label="SMS" />
           <Tab icon={<StatementIcon fontSize="small" />} iconPosition="start" label="Statements" />
           <Tab icon={<SendIcon fontSize="small" />} iconPosition="start" label="Send a message" />
@@ -296,7 +299,15 @@ const MessagingDashboard = () => {
               </Stack>
 
               {channel === 'WHATSAPP' && stats?.reachability?.whatsappOptedIn === 0 && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
+                <Alert
+                  severity="warning"
+                  sx={{ mb: 2 }}
+                  action={(
+                    <Button color="warning" size="small" onClick={() => setTab(TABS.indexOf('CONSENT'))}>
+                      Go to Consent
+                    </Button>
+                  )}
+                >
                   <AlertTitle>No customer has opted in to WhatsApp</AlertTitle>
                   Every WhatsApp message is queued and then skipped. A statement carries a
                   balance, so consent is recorded per customer before one is sent —
@@ -312,6 +323,8 @@ const MessagingDashboard = () => {
               />
             </>
           )}
+
+          {channel === 'CONSENT' && <WhatsappConsent />}
 
           {channel === 'STATEMENTS' && (
             <StatementPanel

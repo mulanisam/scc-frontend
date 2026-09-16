@@ -19,7 +19,9 @@ import {
   InputAdornment,
   Card,
   CardContent,
-  CardHeader
+  CardHeader,
+  Collapse,
+  IconButton
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -30,7 +32,9 @@ import {
   Route as RouteIcon,
   LocalShipping as VehicleIcon,
   Person as DriverIcon,
-  Agriculture as FarmIcon
+  Agriculture as FarmIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getTripContext } from '../service/SalesService';
 import UserService from '../service/UserService';
@@ -87,7 +91,7 @@ const balanceColor = (balance) => {
  * objects to emotion for hashing on the way in. The four numeric fields share a width each,
  * so those five combinations are the only shapes an input cell ever takes.
  */
-const CELL_INPUT_SX = { '& .MuiInputBase-input': { fontSize: '0.85rem', py: '6px' } };
+const CELL_INPUT_SX = { '& .MuiInputBase-input': { fontSize: '0.85rem', py: '4px' } };
 const NUMERIC_INPUT_SX = {
   birds: { width: 80, ...CELL_INPUT_SX },
   kilograms: { width: 90, ...CELL_INPUT_SX },
@@ -96,7 +100,7 @@ const NUMERIC_INPUT_SX = {
 };
 const DESCRIPTION_INPUT_SX = { width: 140, ...CELL_INPUT_SX };
 
-const ROW_SX = { normal: { bgcolor: 'inherit', '& td': { py: 0.5 } }, dimmed: { bgcolor: 'action.hover', '& td': { py: 0.5 } } };
+const ROW_SX = { normal: { bgcolor: 'inherit', '& td': { py: 0.125 } }, dimmed: { bgcolor: 'action.hover', '& td': { py: 0.125 } } };
 const NAME_CELL_SX = { fontWeight: 500, fontSize: '0.85rem', whiteSpace: 'nowrap' };
 const CITY_CELL_SX = { fontSize: '0.85rem', whiteSpace: 'nowrap' };
 const DERIVED_CELL_SX = { fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' };
@@ -114,6 +118,15 @@ const BALANCE_CELL_SX = {
 };
 const balanceCellSx = (balance) =>
   BALANCE_CELL_SX[`${balanceColor(balance)}-${balance > 50000 ? 700 : 400}`];
+
+const TOTALS_CELL_SX = {
+  fontWeight: 700,
+  color: 'white',
+  bgcolor: 'primary.main',
+  border: 'none',
+  py: 0.5,
+  fontSize: '0.8rem'
+};
 
 /**
  * One customer row.
@@ -227,6 +240,16 @@ const SalesEntry = () => {
     return Object.keys(errors).length === 0;
   }, [formData]);
 
+  // Collapsed once a route is picked: that is the point the customer grid
+  // appears and starts competing for the same screen, and the fields above
+  // are usually done by then. Left as a manual toggle rather than forced,
+  // since totalBirds/mortality/return are often typed in after the grid is
+  // already being worked through.
+  const [formExpanded, setFormExpanded] = useState(true);
+  useEffect(() => {
+    if (formData.selectedRoute) setFormExpanded(false);
+  }, [formData.selectedRoute]);
+
   // Row ORDER depends only on the customer list and the search box. It
   // deliberately does not depend on salesData: including it rebuilt this array
   // on every keystroke, which re-rendered all ~100 rows (five inputs each)
@@ -329,6 +352,21 @@ const SalesEntry = () => {
       driver: masterData.drivers.find(d => d.id === formData.selectedDriver)?.name ?? ''
     }
   }), [formData, completedLines, totals, birdCheck, masterData]);
+
+  // What the collapsed form header shows in place of the fields, so picking
+  // a route to save space doesn't also hide what was already chosen.
+  const headerSummary = useMemo(() => {
+    const routeName = masterData.routes.find(r => r.id === formData.selectedRoute)?.name;
+    const vehicleNo = masterData.vehicles.find(v => v.id === formData.selectedVehicle)?.vehicleNo;
+    const driverName = masterData.drivers.find(d => d.id === formData.selectedDriver)?.name;
+    return [
+      formData.date,
+      routeName,
+      vehicleNo,
+      driverName,
+      formData.totalBirds && `${formData.totalBirds} birds`
+    ].filter(Boolean).join('  •  ');
+  }, [formData.date, formData.selectedRoute, formData.selectedVehicle, formData.selectedDriver, formData.totalBirds, masterData]);
 
   const gridRef = useRef(null);
 
@@ -598,21 +636,81 @@ const SalesEntry = () => {
 
       {/* Fixed Header Section */}
       <Box sx={{ flexShrink: 0 }}>
-        <Container maxWidth="xl" sx={{ py: 1 }}>
-         
-          {/* Form Section - Fixed */}
-          <Card elevation={3} sx={{ mb: 2, borderRadius: 2 }}>
-            <CardHeader 
-              title="Sales Information" 
-              sx={{ 
-                bgcolor: 'primary.main', 
+        <Container maxWidth="xl" sx={{ py: 0.5 }}>
+
+          {/* Form Section - Fixed, collapsible once a route is picked so the
+              customer grid below gets the screen back. */}
+          <Card elevation={3} sx={{ mb: 1, borderRadius: 2 }}>
+            <CardHeader
+              title="Sales Information"
+              subheader={!formExpanded && headerSummary ? headerSummary : undefined}
+              onClick={() => setFormExpanded((prev) => !prev)}
+              action={(
+                <IconButton
+                  size="small"
+                  onClick={(event) => { event.stopPropagation(); setFormExpanded((prev) => !prev); }}
+                  sx={{ color: 'white' }}
+                  aria-label={formExpanded ? 'Collapse sales information' : 'Expand sales information'}
+                >
+                  {formExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                </IconButton>
+              )}
+              sx={{
+                bgcolor: 'primary.main',
                 color: 'white',
-                py: 1,
-                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
+                py: 0.5,
+                cursor: 'pointer',
+                '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' },
+                '& .MuiCardHeader-subheader': { fontSize: '0.78rem', color: 'rgba(255,255,255,0.85)' }
               }}
             />
-            <CardContent sx={{ py: 2 }}>
-              <Grid container spacing={2}>
+
+            {/* Warnings stay outside the Collapse: a duplicate trip or an
+                unbalanced bird count is exactly what collapsing the form was
+                meant to keep out of the way for, not hide from view. */}
+            <Box sx={{ px: 1.5, pt: 1 }}>
+              {(dateCheck.blocked || dateCheck.requiresConfirmation || duplicateCheck.isDuplicate) && (
+                <>
+                  {dateCheck.blocked && (
+                    <Alert severity="error" sx={{ py: 0.25, mb: 0.5 }}>
+                      {dateCheck.message}
+                    </Alert>
+                  )}
+                  {dateCheck.requiresConfirmation && (
+                    <Alert severity="warning" sx={{ py: 0.25, mb: 0.5 }}>
+                      {dateCheck.message}
+                    </Alert>
+                  )}
+                  {duplicateCheck.isDuplicate && (
+                    <Alert severity="warning" sx={{ py: 0.25, mb: 0.5 }}>
+                      {duplicateCheck.message}
+                    </Alert>
+                  )}
+                </>
+              )}
+
+              {/* Live bird reconciliation: loaded = sold + mortality + returned */}
+              <Alert
+                severity={birdCheck.balanced ? 'success' : 'warning'}
+                icon={false}
+                sx={{ py: 0.25, mb: 1, '& .MuiAlert-message': { py: 0.5 } }}
+              >
+                <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
+                  Birds:
+                </Typography>{' '}
+                <Typography variant="body2" component="span">
+                  {birdCheck.totalBirds.toLocaleString('en-IN')} loaded ={' '}
+                  {totals.birds.toLocaleString('en-IN')} sold +{' '}
+                  {(Number(formData.mortality) || 0).toLocaleString('en-IN')} mortality +{' '}
+                  {(Number(formData.returnToFarm) || 0).toLocaleString('en-IN')} returned
+                  {birdCheck.balanced ? ' — balanced' : ` — ${birdCheck.message}`}
+                </Typography>
+              </Alert>
+            </Box>
+
+            <Collapse in={formExpanded}>
+            <CardContent sx={{ py: 1.5, pt: 0 }}>
+              <Grid container spacing={1.5}>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     fullWidth
@@ -764,48 +862,9 @@ const SalesEntry = () => {
                   />
                 </Grid>
 
-                {/* What the server already knows about this date and route. */}
-                {(dateCheck.blocked || dateCheck.requiresConfirmation || duplicateCheck.isDuplicate) && (
-                  <Grid item xs={12}>
-                    {dateCheck.blocked && (
-                      <Alert severity="error" sx={{ py: 0.25, mb: 0.5 }}>
-                        {dateCheck.message}
-                      </Alert>
-                    )}
-                    {dateCheck.requiresConfirmation && (
-                      <Alert severity="warning" sx={{ py: 0.25, mb: 0.5 }}>
-                        {dateCheck.message}
-                      </Alert>
-                    )}
-                    {duplicateCheck.isDuplicate && (
-                      <Alert severity="warning" sx={{ py: 0.25 }}>
-                        {duplicateCheck.message}
-                      </Alert>
-                    )}
-                  </Grid>
-                )}
-
-                {/* Live bird reconciliation: loaded = sold + mortality + returned */}
-                <Grid item xs={12}>
-                  <Alert
-                    severity={birdCheck.balanced ? 'success' : 'warning'}
-                    icon={false}
-                    sx={{ py: 0.25, '& .MuiAlert-message': { py: 0.5 } }}
-                  >
-                    <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
-                      Birds:
-                    </Typography>{' '}
-                    <Typography variant="body2" component="span">
-                      {birdCheck.totalBirds.toLocaleString('en-IN')} loaded ={' '}
-                      {totals.birds.toLocaleString('en-IN')} sold +{' '}
-                      {(Number(formData.mortality) || 0).toLocaleString('en-IN')} mortality +{' '}
-                      {(Number(formData.returnToFarm) || 0).toLocaleString('en-IN')} returned
-                      {birdCheck.balanced ? ' — balanced' : ` — ${birdCheck.message}`}
-                    </Typography>
-                  </Alert>
-                </Grid>
               </Grid>
             </CardContent>
+            </Collapse>
           </Card>
         </Container>
       </Box>
@@ -815,40 +874,40 @@ const SalesEntry = () => {
         <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Container maxWidth="xl" sx={{ height: '100%', pb: 0 }}>
             <Card elevation={3} sx={{ height: '100%', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
-              <CardHeader 
-                title="Customer Sales Details" 
-                sx={{ 
-                  bgcolor: 'primary.main', 
-                  color: 'white',
-                  py: 1,
-                  flexShrink: 0,
-                  '& .MuiCardHeader-title': { fontWeight: 600, fontSize: '0.9rem', color: 'white' }
-                }}
-              />
-              
-              {/* Search Box - Fixed */}
-              <Box sx={{ p: 1, bgcolor: '#f8f9fa', flexShrink: 0 }}>
+              {/* Title and search share one row - the two-row header above the
+                  grid was the single biggest chunk of fixed chrome pushing
+                  actual sale rows off screen. */}
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                px: 1.5,
+                py: 0.5,
+                bgcolor: 'primary.main',
+                flexShrink: 0
+              }}>
+                <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', color: 'white', whiteSpace: 'nowrap' }}>
+                  {orderedCustomers.length} customer{orderedCustomers.length === 1 ? '' : 's'}
+                </Typography>
                 <TextField
                   fullWidth
                   placeholder="Search customers..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   size="small"
+                  sx={{ bgcolor: 'white', borderRadius: 1, maxWidth: 320 }}
                   InputProps={{
+                    sx: { py: 0 },
                     startAdornment: (
                       <InputAdornment position="start">
-                        <SearchIcon color="primary" />
+                        <SearchIcon color="primary" fontSize="small" />
                       </InputAdornment>
                     ),
                     endAdornment: searchQuery && (
                       <InputAdornment position="end">
-                        <Button 
-                          size="small" 
-                          onClick={() => setSearchQuery('')}
-                          startIcon={<ClearIcon />}
-                        >
-                          Clear
-                        </Button>
+                        <IconButton size="small" onClick={() => setSearchQuery('')}>
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
                       </InputAdornment>
                     )
                   }}
@@ -872,8 +931,8 @@ const SalesEntry = () => {
                             sx={{
                               fontWeight: 700,
                               whiteSpace: 'nowrap',
-                              py: 0.5,
-                              fontSize: '0.85rem'
+                              py: 0.25,
+                              fontSize: '0.8rem'
                             }}
                           >
                             {header}
@@ -898,68 +957,34 @@ const SalesEntry = () => {
                 </TableContainer>
 
                 {/* Fixed Totals Row */}
-                <Box sx={{ 
-                  borderTop: '2px solid #e0e0e0', 
+                <Box sx={{
+                  borderTop: '2px solid #e0e0e0',
                   bgcolor: 'primary.main',
-                  flexShrink: 0 
+                  flexShrink: 0
                 }}>
                   <Table size="small">
                     <TableBody>
                       <TableRow>
-                        <TableCell colSpan={2} sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'white', 
-                          py: 1,
-                          bgcolor: 'primary.main',
-                          border: 'none'
-                        }}>
+                        <TableCell colSpan={2} sx={TOTALS_CELL_SX}>
                           TOTALS
                         </TableCell>
-                        <TableCell sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'white',
-                          bgcolor: 'primary.main',
-                          border: 'none',
-                          //width: 70
-                        }}>
+                        <TableCell sx={TOTALS_CELL_SX}>
                           BIRDS: {totals.birds}
                         </TableCell>
-                        <TableCell sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'white',
-                          bgcolor: 'primary.main',
-                          border: 'none',
-                         // width: 70
-                        }}>
+                        <TableCell sx={TOTALS_CELL_SX}>
                           WEIGHT: {totals.kilograms.toFixed(1)}
                         </TableCell>
-                        <TableCell sx={{ bgcolor: 'primary.main', border: 'none', width: 70 }}></TableCell>
-                        <TableCell sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'white',
-                          bgcolor: 'primary.main',
-                          border: 'none'
-                        }}>
+                        <TableCell sx={{ ...TOTALS_CELL_SX, fontWeight: 400, width: 70 }} />
+                        <TableCell sx={TOTALS_CELL_SX}>
                           AMOUNT: ₹{totals.amount}
                         </TableCell>
-                        <TableCell sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'white',
-                          bgcolor: 'primary.main',
-                          border: 'none',
-                          //width: 70
-                        }}>
+                        <TableCell sx={TOTALS_CELL_SX}>
                           PAYMENT: ₹{totals.payment}
                         </TableCell>
-                        <TableCell sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'white',
-                          bgcolor: 'primary.main',
-                          border: 'none'
-                        }}>
+                        <TableCell sx={TOTALS_CELL_SX}>
                           PENDING: ₹{totals.pending}
                         </TableCell>
-                        <TableCell colSpan={2} sx={{ bgcolor: 'primary.main', border: 'none' }}></TableCell>
+                        <TableCell colSpan={2} sx={{ ...TOTALS_CELL_SX, fontWeight: 400 }} />
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -973,17 +998,17 @@ const SalesEntry = () => {
       {/* Fixed Action Buttons */}
       <Box sx={{ flexShrink: 0, borderTop: '1px solid #e0e0e0', bgcolor: 'white' }}>
         <Container maxWidth="xl">
-          <Box sx={{ 
-            display: 'flex', 
+          <Box sx={{
+            display: 'flex',
             alignItems: 'center',
-            gap: 3, 
+            gap: 2,
             justifyContent: 'center',
-            py: 1
+            py: 0.5
           }}>
             <Button
               variant="contained"
               color="primary"
-              size="large"
+              size="medium"
               startIcon={<SaveIcon />}
               onClick={handleReview}
               disabled={uiState.submitting || !isFormValid || dateCheck.blocked || !birdCheck.balanced}
@@ -991,11 +1016,11 @@ const SalesEntry = () => {
             >
               Review &amp; Submit
             </Button>
-            
+
             <Button
               variant="outlined"
               color="secondary"
-              size="large"
+              size="medium"
               startIcon={<RestartIcon />}
               onClick={handleClear}
               disabled={uiState.submitting}

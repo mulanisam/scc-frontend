@@ -123,6 +123,22 @@ export const sendQueuedStatements = async (limit = 100) => {
   return response.data;
 };
 
+/**
+ * Every reachable customer's WhatsApp opt-in status, with the totals above the list.
+ */
+export const getConsent = async () => {
+  const response = await apiClient.get(`${BASE}/consent`);
+  return response.data;
+};
+
+/** Opts one customer in or out of WhatsApp. `note` is optional. */
+export const setWhatsappConsent = async (customerId, optIn, note) => {
+  const response = await apiClient.patch(`${BASE}/customer/${customerId}/whatsapp-consent`, {
+    optIn, note,
+  });
+  return response.data;
+};
+
 const MessagingService = {
   getStats,
   getMessages,
@@ -135,6 +151,8 @@ const MessagingService = {
   getStatementRuns,
   buildStatements,
   sendQueuedStatements,
+  getConsent,
+  setWhatsappConsent,
 };
 
 export default MessagingService;
