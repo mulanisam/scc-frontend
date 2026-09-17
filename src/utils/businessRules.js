@@ -81,10 +81,19 @@ export const calculatePending = (amount, payment) =>
  * Whether a grid row represents a real sale line.
  *
  * A line counts once it has both a weight and a rate, since those are what
- * produce an amount. Used for BOTH the on-screen totals and the rows actually
- * submitted: when the two disagreed, the bird totals shown to the operator
- * included rows that were never sent, and the server's own reconciliation
- * (which can only see submitted lines) rejected the entry.
+ * produce an amount - OR once it has a payment with no weight/rate at all: a
+ * customer who took no birds this trip but handed over cash against their
+ * balance. A row with only a payment used to be filtered out here as
+ * "incomplete" and silently dropped before it ever reached the server, which
+ * is why that customer's payment never showed up in the entry. A row with
+ * only ONE of weight/rate (not both, and no payment either) is still
+ * incomplete - that is a half-typed row, not a payment-only line - and is
+ * still rejected here as before.
+ *
+ * Used for BOTH the on-screen totals and the rows actually submitted: when
+ * the two disagreed, the bird totals shown to the operator included rows
+ * that were never sent, and the server's own reconciliation (which can only
+ * see submitted lines) rejected the entry.
  *
  * @param {Object} line
  * @returns {boolean}
@@ -95,7 +104,14 @@ export const isCompleteSaleLine = (line) => {
   const hasValue = (value) =>
     value !== '' && value !== null && value !== undefined && Number(value) > 0;
 
-  return hasValue(line.kilograms) && hasValue(line.rate);
+  const hasWeight = hasValue(line.kilograms);
+  const hasRate = hasValue(line.rate);
+  // Weight without a rate, or vice versa, is a half-typed row, not a
+  // payment-only line - reject it even if a payment was also entered.
+  if (hasWeight !== hasRate) return false;
+
+  const hasPayment = hasValue(line.payment);
+  return (hasWeight && hasRate) || hasPayment;
 };
 
 /**

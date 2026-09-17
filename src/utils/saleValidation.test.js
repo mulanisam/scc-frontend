@@ -192,7 +192,7 @@ describe('buildSaleSummary', () => {
       description: 'morning load',
       sendSms: true
     },
-    lines: [{}, {}, {}],
+    lines: [{ customerId: 1 }, { customerId: 2 }, { customerId: 3 }],
     totals: { birds: 90, kilograms: 180.5, amount: 45000, payment: 30000, pending: 15000 },
     birdCheck: { totalBirds: 100, balanced: true, message: null },
     labels: { route: 'Madha', vehicle: 'MH13 AB 1234', driver: 'Imran' }
@@ -205,6 +205,19 @@ describe('buildSaleSummary', () => {
     expect(summary.vehicle).toBe('MH13 AB 1234');
     expect(summary.driver).toBe('Imran');
     expect(summary.customerCount).toBe(3);
+    expect(summary.lineCount).toBe(3);
+  });
+
+  // A customer with both a standard and a lem line on the same trip is one
+  // customer, not two - customerCount counts distinct customers, lineCount
+  // counts the rows actually being submitted.
+  it('counts customers once even with two lines for the same customer', () => {
+    const summary = buildSaleSummary({
+      ...args,
+      lines: [{ customerId: 1 }, { customerId: 1 }, { customerId: 2 }]
+    });
+    expect(summary.customerCount).toBe(2);
+    expect(summary.lineCount).toBe(3);
   });
 
   it('summarises the bird reconciliation', () => {

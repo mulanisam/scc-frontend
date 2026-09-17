@@ -114,6 +114,20 @@ describe('isCompleteSaleLine', () => {
     expect(isCompleteSaleLine({})).toBe(false);
     expect(isCompleteSaleLine({ kilograms: 'abc', rate: '100' })).toBe(false);
   });
+
+  // A customer who took no birds this trip but handed over cash against
+  // their balance - no weight or rate at all, just a payment.
+  it('counts a payment-only line with no birds, weight or rate', () => {
+    expect(isCompleteSaleLine({ birds: 0, kilograms: '', rate: '', payment: '2000' })).toBe(true);
+    expect(isCompleteSaleLine({ birds: 0, kilograms: 0, rate: 0, payment: 2000 })).toBe(true);
+  });
+
+  it('still rejects a half-filled line even with a payment on it', () => {
+    // Weight without a rate (or vice versa) is a data entry mistake, not a
+    // payment-only line, regardless of whether a payment was also entered.
+    expect(isCompleteSaleLine({ kilograms: '2.5', rate: '', payment: '2000' })).toBe(false);
+    expect(isCompleteSaleLine({ kilograms: '', rate: '100', payment: '2000' })).toBe(false);
+  });
 });
 
 describe('reconcileBirds', () => {

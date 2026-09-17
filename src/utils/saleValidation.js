@@ -137,7 +137,12 @@ export const buildSaleSummary = ({ formData, lines, totals, birdCheck, labels = 
   // what the customer will receive.
   sendSms: Boolean(formData?.sendSms),
   sendWhatsapp: Boolean(formData?.sendWhatsapp),
-  customerCount: lines?.length ?? 0,
+  // Distinct from lineCount: a customer with both a standard and a lem line
+  // on the same trip is one customer but two lines, and showing "70 customers"
+  // when 68 people are actually on the trip sheet would be wrong, not just
+  // imprecise.
+  customerCount: new Set((lines ?? []).map((line) => line.customerId)).size,
+  lineCount: lines?.length ?? 0,
   birds: {
     loaded: birdCheck?.totalBirds ?? 0,
     sold: totals?.birds ?? 0,

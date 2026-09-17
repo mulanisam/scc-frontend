@@ -142,7 +142,12 @@ const SaleSubmitDialog = ({
             <Row label="Route" value={summary.route} />
             <Row label="Vehicle" value={summary.vehicle} />
             <Row label="Driver" value={summary.driver} />
-            <Row label="Customers" value={`${summary.customerCount} with entries`} />
+            <Row
+              label="Customers"
+              value={summary.lineCount > summary.customerCount
+                ? `${summary.customerCount} (${summary.lineCount} sale lines)`
+                : `${summary.customerCount} with entries`}
+            />
             {summary.description && <Row label="Description" value={summary.description} />}
           </TableBody>
         </Table>

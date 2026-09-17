@@ -21,7 +21,9 @@ import {
   CardContent,
   CardHeader,
   Collapse,
-  IconButton
+  IconButton,
+  Tooltip,
+  Chip
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -34,7 +36,9 @@ import {
   Person as DriverIcon,
   Agriculture as FarmIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  AddCircleOutline as AddLemIcon,
+  DeleteOutline as RemoveLemIcon
 } from '@mui/icons-material';
 import { getRoutes, getDrivers, getCustomersByRoute, createSalesEntry, getVehicles, getTripContext } from '../service/SalesService';
 import UserService from '../service/UserService';
@@ -69,8 +73,31 @@ const createInitialSalesData = (customers) =>
       pending: 0,
       balanceAmount: customer.balanceAmount || 0.0,
       description: '',
-      obsolete: customer.obsolete
+      obsolete: customer.obsolete,
+      birdType: 'STANDARD'
     }));
+
+/**
+ * A fresh "lem bird" sub-row for one customer - same shape as a standard row,
+ * so it flows through completedLines/totals/the submit payload identically,
+ * distinguished only by birdType. A customer who takes both breeds on the
+ * same trip is two separate lines at two different rates; nothing else
+ * about them differs.
+ */
+const createLemRow = (customer) => ({
+  customerId: customer.id,
+  city: customer.city?.name,
+  birds: 0,
+  kilograms: '',
+  rate: '',
+  amount: 0,
+  paymentMode: 'cash',
+  payment: 0,
+  pending: 0,
+  balanceAmount: customer.balanceAmount || 0.0,
+  description: '',
+  birdType: 'LEM'
+});
 
 // Column order used by the grid and by keyboard navigation.
 const EDITABLE_FIELDS = ['birds', 'kilograms', 'rate', 'payment', 'description'];
@@ -119,6 +146,12 @@ const BALANCE_CELL_SX = {
 const balanceCellSx = (balance) =>
   BALANCE_CELL_SX[`${balanceColor(balance)}-${balance > 50000 ? 700 : 400}`];
 
+const ACTIONS_CELL_SX = { width: 40, textAlign: 'center' };
+const LEM_ROW_SX = {
+  bgcolor: 'rgba(255, 152, 0, 0.08)',
+  '& td': { py: 0.125, borderTop: 'none' }
+};
+
 const TOTALS_CELL_SX = {
   fontWeight: 700,
   color: 'white',
@@ -135,7 +168,9 @@ const TOTALS_CELL_SX = {
  * replaces a single entry in the sales array, leaving every other row's `row`
  * object identity intact.
  */
-const SaleRow = React.memo(function SaleRow({ customer, row, rowIndex, salesIndex, dimmed, onChange }) {
+const SaleRow = React.memo(function SaleRow({
+  customer, row, rowIndex, salesIndex, dimmed, onChange, hasLemRow, onAddLemRow
+}) {
   const numericCell = (field) => (
     <TableCell>
       <TextField
@@ -183,6 +218,78 @@ const SaleRow = React.memo(function SaleRow({ customer, row, rowIndex, salesInde
           inputProps={{ 'data-row': rowIndex, 'data-field': 'description' }}
         />
       </TableCell>
+
+      <TableCell sx={ACTIONS_CELL_SX}>
+        {!hasLemRow && (
+          <Tooltip title="Add a lem bird line for this customer">
+            <IconButton size="small" color="warning" onClick={onAddLemRow}>
+              <AddLemIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+});
+
+/**
+ * A customer's second line on the same trip: lem birds, at their own rate.
+ * Same shape and calculations as the standard row - only the rate normally
+ * differs - kept as its own row rather than a second set of fields on
+ * SaleRow so the common case (no lem birds) costs nothing extra to render.
+ */
+const LemSaleRow = React.memo(function LemSaleRow({ row, dimmed, onChange, onRemove }) {
+  const numericCell = (field) => (
+    <TableCell>
+      <TextField
+        size="small"
+        type="number"
+        value={row?.[field] ?? ''}
+        onChange={(e) => onChange(field, e.target.value)}
+        sx={NUMERIC_INPUT_SX[field]}
+      />
+    </TableCell>
+  );
+
+  return (
+    <TableRow hover sx={{ ...LEM_ROW_SX, ...(dimmed ? { opacity: 0.5 } : {}) }}>
+      <TableCell sx={NAME_CELL_SX}>
+        <Chip size="small" label="Lem" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+      </TableCell>
+      <TableCell sx={CITY_CELL_SX}>{row?.city}</TableCell>
+
+      {numericCell('birds')}
+      {numericCell('kilograms')}
+      {numericCell('rate')}
+
+      <TableCell sx={DERIVED_CELL_SX}>
+        ₹{(row?.amount ?? 0).toLocaleString('en-IN')}
+      </TableCell>
+
+      {numericCell('payment')}
+
+      <TableCell sx={DERIVED_CELL_SX}>
+        ₹{(row?.pending ?? 0).toLocaleString('en-IN')}
+      </TableCell>
+
+      <TableCell />
+
+      <TableCell>
+        <TextField
+          size="small"
+          value={row?.description ?? ''}
+          onChange={(e) => onChange('description', e.target.value)}
+          sx={DESCRIPTION_INPUT_SX}
+        />
+      </TableCell>
+
+      <TableCell sx={ACTIONS_CELL_SX}>
+        <Tooltip title="Remove this lem bird line">
+          <IconButton size="small" color="error" onClick={onRemove}>
+            <RemoveLemIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </TableCell>
     </TableRow>
   );
 });
@@ -223,6 +330,11 @@ const SalesEntry = () => {
   });
 
   const [salesData, setSalesData] = useState([]);
+  // Lem bird lines, one per customer who has one, keyed by customerId.
+  // Sparse on purpose: most customers never have one, so tracking them
+  // separately from salesData means the ~70-row standard grid's shape and
+  // keyboard navigation are untouched by a feature almost no row uses.
+  const [lemRows, setLemRows] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [uiState, setUiState] = useState({
     loading: false,
@@ -277,10 +389,12 @@ const SalesEntry = () => {
 
   // Only lines that will actually be submitted. The server reconciles birds
   // against the lines it receives, so totalling rows that are never sent would
-  // show a balanced load on screen and then be rejected on submit.
+  // show a balanced load on screen and then be rejected on submit. Lem lines
+  // are folded in here too - same shape as a standard line, so totals and
+  // the review screen need no separate handling for them.
   const completedLines = useMemo(
-    () => salesData.filter(isCompleteSaleLine),
-    [salesData]
+    () => [...salesData.filter(isCompleteSaleLine), ...Object.values(lemRows).filter(isCompleteSaleLine)],
+    [salesData, lemRows]
   );
 
   const totals = useMemo(() =>
@@ -449,6 +563,34 @@ const SalesEntry = () => {
     });
   }, []);
 
+  const handleAddLemRow = useCallback((customer) => {
+    setLemRows(prev => (prev[customer.id] ? prev : { ...prev, [customer.id]: createLemRow(customer) }));
+  }, []);
+
+  const handleRemoveLemRow = useCallback((customerId) => {
+    setLemRows(prev => {
+      if (!prev[customerId]) return prev;
+      const next = { ...prev };
+      delete next[customerId];
+      return next;
+    });
+  }, []);
+
+  const handleLemRowChange = useCallback((customerId, field, value) => {
+    setLemRows(prev => {
+      const existing = prev[customerId];
+      if (!existing) return prev;
+
+      const row = { ...existing, [field]: value };
+      if (field === 'rate' || field === 'kilograms') {
+        row.amount = calculateAmount(row.kilograms, row.rate);
+      }
+      row.pending = calculatePending(row.amount, row.payment);
+
+      return { ...prev, [customerId]: row };
+    });
+  }, []);
+
   // Load initial data
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -489,12 +631,14 @@ const SalesEntry = () => {
         const filteredCustomers = (response.data || []).filter(customer => !customer.obsolete);
         setMasterData(prev => ({ ...prev, customers: filteredCustomers }));
         setSalesData(createInitialSalesData(response.data || []));
+        setLemRows({});
         setSearchQuery('');
       } catch (error) {
         console.error('Error fetching customers:', error);
         showSnackbar('Error loading customers', 'error');
         setMasterData(prev => ({ ...prev, customers: [] }));
         setSalesData([]);
+        setLemRows({});
       }
     };
 
@@ -589,6 +733,7 @@ const SalesEntry = () => {
       sendWhatsapp: false
     });
     setSalesData([]);
+    setLemRows({});
     setSearchQuery('');
     setMasterData(prev => ({ ...prev, customers: [] }));
     setUiState(prev => ({ ...prev, errors: {} }));
@@ -925,7 +1070,7 @@ const SalesEntry = () => {
                   <Table stickyHeader size="small">
                     <TableHead>
                       <TableRow>
-                        {['Customer', 'City', 'Birds', 'Kilograms', 'Rate', 'Amount', 'Payment', 'Pending', 'Balance', 'Description'].map(header => (
+                        {['Customer', 'City', 'Birds', 'Kilograms', 'Rate', 'Amount', 'Payment', 'Pending', 'Balance', 'Description', ''].map(header => (
                           <TableCell
                             key={header}
                             sx={{
@@ -942,15 +1087,26 @@ const SalesEntry = () => {
                     </TableHead>
                     <TableBody>
                       {orderedCustomers.map(({ customer, salesIndex, matches }, rowIndex) => (
-                        <SaleRow
-                          key={customer.id}
-                          customer={customer}
-                          row={salesData[salesIndex]}
-                          rowIndex={rowIndex}
-                          salesIndex={salesIndex}
-                          dimmed={!matches}
-                          onChange={handleSalesDataChange}
-                        />
+                        <React.Fragment key={customer.id}>
+                          <SaleRow
+                            customer={customer}
+                            row={salesData[salesIndex]}
+                            rowIndex={rowIndex}
+                            salesIndex={salesIndex}
+                            dimmed={!matches}
+                            onChange={handleSalesDataChange}
+                            hasLemRow={Boolean(lemRows[customer.id])}
+                            onAddLemRow={() => handleAddLemRow(customer)}
+                          />
+                          {lemRows[customer.id] && (
+                            <LemSaleRow
+                              row={lemRows[customer.id]}
+                              dimmed={!matches}
+                              onChange={(field, value) => handleLemRowChange(customer.id, field, value)}
+                              onRemove={() => handleRemoveLemRow(customer.id)}
+                            />
+                          )}
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>
@@ -984,7 +1140,7 @@ const SalesEntry = () => {
                         <TableCell sx={TOTALS_CELL_SX}>
                           PENDING: ₹{totals.pending}
                         </TableCell>
-                        <TableCell colSpan={2} sx={{ ...TOTALS_CELL_SX, fontWeight: 400 }} />
+                        <TableCell colSpan={3} sx={{ ...TOTALS_CELL_SX, fontWeight: 400 }} />
                       </TableRow>
                     </TableBody>
                   </Table>
